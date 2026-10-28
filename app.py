@@ -13,7 +13,6 @@ st.markdown(
 
 @st.cache_data(ttl=30)
 def cargar_datos():
-  # Lee tu archivo de Excel
   df = pd.read_excel("SGTO X CANAL.xlsx", sheet_name="Export")
   return df
 

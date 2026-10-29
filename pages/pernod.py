@@ -37,7 +37,19 @@ try:
     col_mes = detectar_columna(['Mes', 'Month'], 5)
     col_valor = detectar_columna(['Ventas Det', 'Venta', 'Valor', 'Total'], 6)
 
-    # --- BARRA LATERAL: FILTROS Y BUSCADOR DE CLIENTE ---
+    # Asegurar tipo numérico limpio en la columna de valor global desde el inicio
+    df[col_valor] = pd.to_numeric(df[col_valor], errors='coerce').fillna(0)
+    df[col_anio] = pd.to_numeric(df[col_anio], errors='coerce')
+
+    # --- PANEL DE DEPUGUARCIÓN RÁPIDA (Para verificar que cuadre con Excel) ---
+    with st.expander("🛠️ Verificación de Datos y Diagnóstico (Comparar con Excel)", expanded=False):
+        st.write(f"**Columna de Venta Detectada:** `{col_valor}`")
+        st.write(f"**Columna de Mes Detectada:** `{col_mes}` | Valores únicos en Excel: `{df[col_mes].dropna().unique().tolist()}`")
+        total_absoluto_excel = df[col_valor].sum()
+        st.metric("Suma Total Bruta de Todo el Archivo Excel", f"${total_absoluto_excel:,.0f}")
+        st.caption("Si este total bruto no coincide con tu archivo de Excel completo, significa que la columna de valor detectada no es la correcta.")
+
+    # --- BARRA LATERAL: FILTROS ---
     st.sidebar.header("🎯 Filtros")
 
     df_f = df.copy()
@@ -67,10 +79,6 @@ try:
     if busqueda_cliente:
         df_f = df_f[df_f[col_cliente].astype(str).str.contains(busqueda_cliente, case=False, na=False)]
 
-    # Asegurar tipos de datos numéricos
-    df_f[col_valor] = pd.to_numeric(df_f[col_valor], errors='coerce').fillna(0)
-    df_f[col_anio] = pd.to_numeric(df_f[col_anio], errors='coerce')
-
     # --- CUERPO PRINCIPAL: FILTROS DE AÑO Y MESES ARRIBA ---
     st.subheader("📅 Panel de Control Temporal")
     
@@ -81,12 +89,11 @@ try:
         anio_base = st.selectbox("Selecciona el Año Base:", anios_disp, index=len(anios_disp)-1 if anios_disp else 0)
 
     with col_f2:
-        meses_ordenados = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
-        meses_existentes = df_f[col_mes].dropna().unique()
-        meses_disp = [m for m in meses_ordenados if m in meses_existentes] if any(m in meses_existentes for m in meses_ordenados) else sorted(meses_existentes)
+        # Extraer los meses tal como vienen en el DataFrame original para evitar desajustes
+        meses_disp = sorted(df_f[col_mes].dropna().unique(), key=lambda x: str(x))
 
         if hasattr(st, "segmented_control"):
-            meses_sel = st.segmented_control("Selecciona los meses activos (Un Clic):", options=meses_disp, default=meses_disp, selection_mode="multi")
+            meses_sel = st.segmented_control("Selecciona los meses activos:", options=meses_disp, default=meses_disp, selection_mode="multi")
         else:
             meses_sel = st.multiselect("Selecciona los meses activos:", options=meses_disp, default=list(meses_disp))
 
@@ -96,7 +103,7 @@ try:
         anio_sel = int(anio_base)
         anio_anterior = anio_sel - 1
 
-        # Filtrado por período seleccionado
+        # Filtrado estricto por período seleccionado
         df_actual = df_f[(df_f[col_anio] == anio_sel) & (df_f[col_mes].isin(meses_sel))]
         df_ant = df_f[(df_f[col_anio] == anio_anterior) & (df_f[col_mes].isin(meses_sel))]
 
@@ -113,7 +120,7 @@ try:
 
         st.markdown("---")
 
-        # --- GRÁFICOS INTERACTIVOS (SIN DECIMALES EN BARRAS Y BARRA DE COLOR) ---
+        # --- GRÁFICOS INTERACTIVOS ---
         col_g1, col_g2 = st.columns(2)
 
         with col_g1:
@@ -174,7 +181,7 @@ try:
 
         st.markdown("---")
 
-        # --- TABLA COMPARATIVA DE CLIENTES (SIN DECIMALES) ---
+        # --- TABLA COMPARATIVA DE CLIENTES ---
         st.subheader("📋 Detalle por Cliente (Año Actual vs. Año Anterior)")
 
         ventas_actual = df_actual.groupby(col_cliente)[col_valor].sum().reset_index()

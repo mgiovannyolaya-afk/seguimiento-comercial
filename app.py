@@ -70,49 +70,66 @@ try:
   # --- BARRA LATERAL DE FILTROS Y GRÁFICO ---
   st.sidebar.header("🔍 Filtros de Segmentación")
 
-  # 1. Filtro de Regional (Nuevo)
-  regional_col = (
-      "Regional" if "Regional" in df.columns else "REGIONAL"
-  )  # Detectar variaciones de mayúsculas
-  if regional_col not in df.columns and "REGIONAL" in df.columns:
-    regional_col = "REGIONAL"
+  df_temp = df.copy()
 
-  if regional_col in df.columns:
-    regionales = ["Todas"] + sorted(
-        df[regional_col].dropna().astype(str).unique().tolist()
+  # 1. Filtro de Código UN (Regional: DIBOG, DICAL, DIMED)
+  col_un_candidatas = [
+      c for c in df.columns if "un" in c.lower() or "codigo" in c.lower()
+  ]
+  col_un = col_un_candidatas[0] if col_un_candidatas else None
+
+  if col_un and col_un in df.columns:
+    un_opciones = ["Todos"] + sorted(
+        df_temp[col_un].dropna().astype(str).unique().tolist()
     )
-    regional_seleccionada = st.sidebar.selectbox("Regional", regionales)
-    if regional_seleccionada != "Todas":
-      df_temp = df[df[regional_col].astype(str) == regional_seleccionada]
-    else:
-      df_temp = df
-  else:
-    df_temp = df
+    un_sel = st.sidebar.selectbox("Código UN (Regional)", un_opciones)
+    if un_sel != "Todos":
+      df_temp = df_temp[df_temp[col_un].astype(str) == un_sel]
 
   # 2. Filtro de Canal
-  canales = ["Todos"] + sorted(
-      df_temp["Canal"].dropna().astype(str).unique().tolist()
-  )
-  canal_seleccionado = st.sidebar.selectbox("Canal", canales)
+  if "Canal" in df.columns:
+    canales = ["Todos"] + sorted(
+        df_temp["Canal"].dropna().astype(str).unique().tolist()
+    )
+    canal_sel = st.sidebar.selectbox("Canal", canales)
+    if canal_sel != "Todos":
+      df_temp = df_temp[df_temp["Canal"].astype(str) == canal_sel]
 
-  if canal_seleccionado != "Todos":
-    df_temp = df_temp[df_temp["Canal"].astype(str) == canal_seleccionado]
+  # 3. Filtro de Supervisor
+  if "Supervisor" in df.columns:
+    supervisores = ["Todos"] + sorted(
+        df_temp["Supervisor"].dropna().astype(str).unique().tolist()
+    )
+    sup_sel = st.sidebar.selectbox("Supervisor", supervisores)
+    if sup_sel != "Todos":
+      df_temp = df_temp[df_temp["Supervisor"].astype(str) == sup_sel]
 
-  # 3. Filtro de Zona
-  zonas = ["Todas"] + sorted(
-      df_temp["Zona"].dropna().astype(str).unique().tolist()
-  )
-  zona_seleccionada = st.sidebar.selectbox("Zona", zonas)
+  # 4. Filtro de Zona
+  if "Zona" in df.columns:
+    zonas = ["Todas"] + sorted(
+        df_temp["Zona"].dropna().astype(str).unique().tolist()
+    )
+    zona_sel = st.sidebar.selectbox("Zona", zonas)
+    if zona_sel != "Todas":
+      df_temp = df_temp[df_temp["Zona"].astype(str) == zona_sel]
 
-  if zona_seleccionada != "Todas":
-    df_filtrado = df_temp[df_temp["Zona"].astype(str) == zona_seleccionada]
+  # 5. Filtro de Vendedor
+  if "Vendedor" in df.columns:
+    vendedores = ["Todos"] + sorted(
+        df_temp["Vendedor"].dropna().astype(str).unique().tolist()
+    )
+    vend_sel = st.sidebar.selectbox("Vendedor", vendedores)
+    if vend_sel != "Todos":
+      df_filtrado = df_temp[df_temp["Vendedor"].astype(str) == vend_sel]
+    else:
+      df_filtrado = df_temp
   else:
     df_filtrado = df_temp
 
   # --- GRÁFICO PEQUEÑO EN LA BARRA LATERAL ---
   st.sidebar.markdown("---")
   st.sidebar.subheader("📊 Resumen Visual")
-  if not df_filtrado.empty:
+  if not df_filtrado.empty and "Canal" in df_filtrado.columns:
     df_grafico = (
         df_filtrado.groupby("Canal")[["TOTAL", "RESERVA DIA"]]
         .sum()
@@ -148,8 +165,14 @@ try:
       (impactados_count / total_clientes * 100) if total_clientes > 0 else 0
   )
 
-  total_ventas = df_filtrado["TOTAL"].sum()
-  total_reserva_dia = df_filtrado["RESERVA DIA"].sum()
+  total_ventas = (
+      df_filtrado["TOTAL"].sum() if "TOTAL" in df_filtrado.columns else 0
+  )
+  total_reserva_dia = (
+      df_filtrado["RESERVA DIA"].sum()
+      if "RESERVA DIA" in df_filtrado.columns
+      else 0
+  )
 
   str_ventas = f"${total_ventas:,.0f}"
   str_reserva = f"${total_reserva_dia:,.0f}"
@@ -228,11 +251,13 @@ try:
       "📋 Detalle Comercial General",
   ])
 
-  # Columnas principales sin Supervisor ni Vendedor
+  # Columnas a mostrar incluyendo Supervisor, Vendedor y Código UN
   columnas_principales = [
-      "Regional",
+      col_un,
       "Canal",
+      "Supervisor",
       "Zona",
+      "Vendedor",
       "Nit Cliente",
       "Nombre Cliente",
       "Ciudad",
@@ -242,14 +267,10 @@ try:
       "%Eje Ppto",
   ]
   cols_disponibles = [
-      c for c in columnas_principales if c in df_filtrado.columns
+      c
+      for c in columnas_principales
+      if c is not None and c in df_filtrado.columns
   ]
-  if not cols_disponibles:
-    cols_disponibles = [
-        c
-        for c in df_filtrado.columns
-        if c not in ["Supervisor", "Vendedor"]
-    ]
 
   with pestana1:
     st.subheader("🔍 Clientes Pendientes por Impactar (Oportunidad)")

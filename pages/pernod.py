@@ -179,7 +179,7 @@ try:
 
         st.markdown("---")
 
-        # --- NUEVO: GRÁFICO DE TENDENCIA MENSUAL (LÍNEAS YoY) ---
+        # --- GRÁFICO DE TENDENCIA MENSUAL (LÍNEAS YoY - ALTURA AJUSTADA) ---
         st.subheader(f"📈 Tendencia Mensual de Ventas ({anio_sel} vs {anio_anterior})")
         df_tendencia = df_f[df_f[col_anio].isin([anio_sel, anio_anterior])]
         if not df_tendencia.empty:
@@ -194,7 +194,11 @@ try:
                 color_discrete_sequence=['#1f77b4', '#aec7e8']
             )
             fig_tend.update_traces(hovertemplate='<b>Mes: %{x}</b><br>Venta: $%{y:,.0f}<extra></extra>')
-            fig_tend.update_layout(xaxis_title="Mes", yaxis_title="Venta Total ($)")
+            fig_tend.update_layout(
+                xaxis_title="Mes", 
+                yaxis_title="Venta Total ($)",
+                height=350  # <-- Altura optimizada para que luzca proporcionada
+            )
             st.plotly_chart(fig_tend, use_container_width=True)
         else:
             st.info("No hay datos suficientes para la tendencia mensual.")

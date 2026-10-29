@@ -17,7 +17,7 @@ st.markdown("""
 # Título principal del tablero
 st.title("🎯 Control de Oportunidades y Cumplimiento (Meta 70%)")
 st.markdown(
-    "Monitoreo interactivo de ejecución de impactos y gestión comercial."
+    "Monitoreo interactivo de ejecución de impactos, canales y ventas."
 )
 st.markdown("---")
 
@@ -31,25 +31,34 @@ def cargar_datos():
 try:
   df = cargar_datos()
 
-  # Asegurar formato numérico en la columna IMPACTO
+  # Asegurar formato numérico en columnas clave
   if "IMPACTO" in df.columns:
     df["IMPACTO"] = pd.to_numeric(df["IMPACTO"], errors="coerce").fillna(0)
 
   # --- BARRA LATERAL DE FILTROS INTERACTIVOS ---
   st.sidebar.header("🔍 Filtros de Segmentación")
 
-  # Filtro de Supervisor
+  # 1. Filtro de Canal (¡Nuevo!)
+  canales = ["Todos"] + sorted(
+      df["Canal"].dropna().astype(str).unique().tolist()
+  )
+  canal_seleccionado = st.sidebar.selectbox("Canal", canales)
+
+  if canal_seleccionado != "Todos":
+    df_temp = df[df["Canal"].astype(str) == canal_seleccionado]
+  else:
+    df_temp = df
+
+  # 2. Filtro de Supervisor
   supervisores = ["Todos"] + sorted(
-      df["Supervisor"].dropna().astype(str).unique().tolist()
+      df_temp["Supervisor"].dropna().astype(str).unique().tolist()
   )
   sup_seleccionado = st.sidebar.selectbox("Supervisor", supervisores)
 
   if sup_seleccionado != "Todos":
-    df_temp = df[df["Supervisor"].astype(str) == sup_seleccionado]
-  else:
-    df_temp = df
+    df_temp = df_temp[df_temp["Supervisor"].astype(str) == sup_seleccionado]
 
-  # Filtro de Zona
+  # 3. Filtro de Zona
   zonas = ["Todas"] + sorted(
       df_temp["Zona"].dropna().astype(str).unique().tolist()
   )
@@ -58,7 +67,7 @@ try:
   if zona_seleccionada != "Todas":
     df_temp = df_temp[df_temp["Zona"].astype(str) == zona_seleccionada]
 
-  # Filtro de Vendedor
+  # 4. Filtro de Vendedor
   vendedores = ["Todos"] + sorted(
       df_temp["Vendedor"].dropna().astype(str).unique().tolist()
   )
@@ -71,7 +80,7 @@ try:
   else:
     df_filtrado = df_temp
 
-  # --- CÁLCULO DE MÉTRICAS Y PORCENTAJE DE EJECUCIÓN ---
+  # --- CÁLCULO DE MÉTRICAS Y TOTALES ---
   total_clientes = len(df_filtrado)
   impactados_count = (
       int(df_filtrado["IMPACTO"].sum()) if "IMPACTO" in df_filtrado.columns else 0
@@ -81,6 +90,12 @@ try:
       (impactados_count / total_clientes * 100) if total_clientes > 0 else 0
   )
 
+  # Suma de ventas totales según la columna 'TOTAL' de la hoja Export
+  total_ventas = (
+      pd.to_numeric(df_filtrado["TOTAL"], errors="coerce").sum()
+      if "TOTAL" in df_filtrado.columns
+      else 0
+  )
   total_reserva = pd.to_numeric(
       df_filtrado["Reserva"], errors="coerce"
   ).sum()
@@ -101,11 +116,11 @@ try:
         label="⚠️ Con Oportunidad (Falta)", value=f"{oportunidad_count:,}"
     )
   with col4:
-    st.metric(label="🎯 Meta Comercial", value="70%")
+    st.metric(label="💰 Venta Total", value=f"${total_ventas:,.0f}")
   with col5:
-    st.metric(label="💰 Total Reserva", value=f"${total_reserva:,.0f}")
+    st.metric(label="🎯 Meta Comercial", value="70%")
 
-  # Barra de progreso visual para el porcentaje de ejecución
+  # Barra de progreso visual para el porcentaje de ejecución de impactos
   st.progress(
       min(max(porcentaje_ejecucion / 100.0, 0.0), 1.0),
       text=f"Progreso de Ejecución de Impactos: {porcentaje_ejecucion:.1f}%",
@@ -119,15 +134,16 @@ try:
       "📋 Detalle Comercial General",
   ])
 
-  # Columnas clave para mostrar
+  # Columnas clave para mostrar ordenadas
   columnas_principales = [
+      "Canal",
       "Supervisor",
       "Zona",
       "Vendedor",
       "Nit Cliente",
       "Nombre Cliente",
       "Ciudad",
-      "Canal",
+      "TOTAL",
       "Reserva",
       "Total Cartera",
       "%Eje Ppto",
@@ -138,14 +154,10 @@ try:
 
   with pestana1:
     st.subheader("🔍 Clientes Pendientes por Impactar (Oportunidad)")
-    st.markdown(
-        "Listado de clientes donde **IMPACTO = 0** (requieren gestión comercial"
-        " para cerrar la brecha)."
-    )
     if "IMPACTO" in df_filtrado.columns:
       df_opp = df_filtrado[df_filtrado["IMPACTO"] == 0]
       st.metric(
-          label="Clientes en este segmento", value=f"{len(df_opp):,}"
+          label="Clientes Pendientes en este filtro", value=f"{len(df_opp):,}"
       )
       st.dataframe(
           df_opp[cols_disponibles], use_container_width=True, height=450
@@ -155,11 +167,10 @@ try:
 
   with pestana2:
     st.subheader("✅ Clientes Impactados Exitosamente")
-    st.markdown("Listado de clientes donde **IMPACTO = 1**.")
     if "IMPACTO" in df_filtrado.columns:
       df_imp = df_filtrado[df_filtrado["IMPACTO"] == 1]
       st.metric(
-          label="Clientes en este segmento", value=f"{len(df_imp):,}"
+          label="Clientes Impactados en este filtro", value=f"{len(df_imp):,}"
       )
       st.dataframe(
           df_imp[cols_disponibles], use_container_width=True, height=450

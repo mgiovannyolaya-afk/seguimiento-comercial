@@ -179,10 +179,9 @@ try:
 
         st.markdown("---")
 
-        # --- TABLA COMPARATIVA DE CLIENTES CON BUSCADOR INTEGRADO ---
+        # --- TABLA COMPARATIVA DE CLIENTES CON ESTILOS CONDICIONALES ---
         st.subheader("📋 Detalle por Cliente (Año Actual vs. Año Anterior)")
 
-        # Buscador específico colocado justo encima de la tabla
         busqueda_tabla = st.text_input("🔍 Escribe el nombre del cliente para buscar en la tabla:", "")
 
         ventas_actual = df_actual.groupby(col_cliente)[col_valor].sum().reset_index()
@@ -198,18 +197,37 @@ try:
         
         tabla_final = tabla_final.sort_values(by=f'Venta {anio_sel}', ascending=False)
 
-        # Filtrar la tabla en tiempo real si el usuario escribe en el buscador
         if busqueda_tabla:
             tabla_final = tabla_final[tabla_final[col_cliente].astype(str).str.contains(busqueda_tabla, case=False, na=False)]
 
-        # Formatos finales en moneda y porcentajes sin decimales
-        for col_m in [f'Venta {anio_sel}', f'Venta {anio_anterior}', 'Variación ($)']:
-            tabla_final[col_m] = tabla_final[col_m].apply(lambda x: f"${x:,.0f}")
+        # Función de estilo condicional robusta para verde (crece) y rojo (decrece)
+        def color_variacion(val):
+            try:
+                if isinstance(val, (int, float)):
+                    if val > 0:
+                        return 'color: #2E7D32; font-weight: bold;'
+                    elif val < 0:
+                        return 'color: #C62828; font-weight: bold;'
+            except:
+                pass
+            return ''
 
-        tabla_final['Variación (%)'] = tabla_final['Variación (%)'].apply(lambda x: f"{x:,.0f}%")
+        # Formatos finales en moneda y porcentajes sin decimales
+        format_dict = {
+            f'Venta {anio_sel}': '${:,.0f}',
+            f'Venta {anio_anterior}': '${:,.0f}',
+            'Variación ($)': '${:,.0f}',
+            'Variación (%)': '{:,.0f}%'
+        }
+
+        tabla_estilizada = (
+            tabla_final.style
+            .format(format_dict)
+            .map(color_variacion, subset=['Variación ($)', 'Variación (%)'])
+        )
 
         st.caption(f"Comparativa activa para: **{', '.join(map(str, meses_sel))}** ({anio_sel} vs. {anio_anterior})")
-        st.dataframe(tabla_final, use_container_width=True)
+        st.dataframe(tabla_estilizada, use_container_width=True)
 
     else:
         st.warning("⚠️ Selecciona un Año Base y al menos un Mes.")

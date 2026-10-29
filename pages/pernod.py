@@ -16,7 +16,7 @@ try:
     df = cargar_datos()
     columnas = df.columns.tolist()
 
-    # Función automática inteligente para encontrar las columnas exactas
+    # Detección automática inteligente de columnas
     def detectar_columna(palabras_clave, fallback_idx=0):
         for pk in palabras_clave:
             for col in columnas:
@@ -28,37 +28,37 @@ try:
                     return col
         return columnas[fallback_idx] if fallback_idx < len(columnas) else columnas[0]
 
-    # Asignación automática priorizando "Tipo de Cliente" para el canal
+    # Asignación automática de columnas
+    col_regional = detectar_columna(['Código UN', 'Cod UN', 'Regional', 'Región'], 1)
     col_canal = detectar_columna(['Tipo de Cliente', 'Tipo cliente', 'Canal', 'Canal de Venta'], 0)
-    col_regional = detectar_columna(['Regional', 'Región', 'Reg', 'Código UN', 'Cod UN'], 1)
-    col_gerente = detectar_columna(['Gerente Zona', 'Gerente Unidad', 'Gerente'], 2)
+    col_gerente = detectar_columna(['Gerente Zona', 'Gerente Unidad', 'Supervisor', 'Gerente'], 2)
     col_cliente = detectar_columna(['Nombre Cliente', 'Cliente', 'Documento Cliente'], 3)
     col_anio = detectar_columna(['Año', 'Anio', 'Year'], 4)
     col_mes = detectar_columna(['Mes', 'Month'], 5)
     col_valor = detectar_columna(['Ventas Det', 'Venta', 'Valor', 'Total'], 6)
 
-    # --- BARRA LATERAL: ORDEN EXACTO (Regional -> Gerente -> Tipo de Cliente) ---
-    st.sidebar.header("🎯 Filtros Interactivos")
+    # --- BARRA LATERAL: FILTROS CON OPCIÓN "TODOS" ---
+    st.sidebar.header("🎯 Filtros")
 
     df_f = df.copy()
 
-    # 1. Primero: Regional (DIBOG, DICAL, etc.)
-    regional_disp = sorted(df_f[col_regional].dropna().unique().astype(str))
-    regional_sel = st.sidebar.multiselect("Regional:", regional_disp, default=regional_disp)
-    if regional_sel:
-        df_f = df_f[df_f[col_regional].astype(str).isin(regional_sel)]
+    # 1. Código UN (Regional)
+    opciones_reg = ["Todos"] + sorted([str(x) for x in df_f[col_regional].dropna().unique()])
+    sel_reg = st.sidebar.selectbox("Código UN (Regional)", opciones_reg, index=0)
+    if sel_reg != "Todos":
+        df_f = df_f[df_f[col_regional].astype(str) == sel_reg]
 
-    # 2. Segundo: Gerente de Unidad (GU)
-    gerente_disp = sorted(df_f[col_gerente].dropna().unique().astype(str))
-    gerente_sel = st.sidebar.multiselect("Gerente de Unidad (GU):", gerente_disp, default=gerente_disp)
-    if gerente_sel:
-        df_f = df_f[df_f[col_gerente].astype(str).isin(gerente_sel)]
+    # 2. Canal / Tipo de Cliente
+    opciones_canal = ["Todos"] + sorted([str(x) for x in df_f[col_canal].dropna().unique()])
+    sel_canal = st.sidebar.selectbox("Canal", opciones_canal, index=0)
+    if sel_canal != "Todos":
+        df_f = df_f[df_f[col_canal].astype(str) == sel_canal]
 
-    # 3. Tercero: Tipo de Cliente / Canal
-    canales_disp = sorted(df_f[col_canal].dropna().unique().astype(str))
-    canales_sel = st.sidebar.multiselect("Tipo de Cliente:", canales_disp, default=canales_disp)
-    if canales_sel:
-        df_f = df_f[df_f[col_canal].astype(str).isin(canales_sel)]
+    # 3. Supervisor / Gerente de Unidad
+    opciones_gerente = ["Todos"] + sorted([str(x) for x in df_f[col_gerente].dropna().unique()])
+    sel_gerente = st.sidebar.selectbox("Supervisor", opciones_gerente, index=0)
+    if sel_gerente != "Todos":
+        df_f = df_f[df_f[col_gerente].astype(str) == sel_gerente]
 
     # Asegurar tipos de datos numéricos
     df_f[col_valor] = pd.to_numeric(df_f[col_valor], errors='coerce').fillna(0)
@@ -89,7 +89,7 @@ try:
         anio_sel = int(anio_base)
         anio_anterior = anio_sel - 1
 
-        # Filtrado por período seleccionado arriba
+        # Filtrado por período seleccionado
         df_actual = df_f[(df_f[col_anio] == anio_sel) & (df_f[col_mes].isin(meses_sel))]
         df_ant = df_f[(df_f[col_anio] == anio_anterior) & (df_f[col_mes].isin(meses_sel))]
 
@@ -106,7 +106,7 @@ try:
 
         st.markdown("---")
 
-        # --- GRÁFICOS INTERACTIVOS ---
+        # --- GRÁFICOS INTERACTIVOS CON VALORES EN PESOS ---
         col_g1, col_g2 = st.columns(2)
 
         with col_g1:
@@ -114,10 +114,14 @@ try:
             if not df_actual.empty:
                 df_reg = df_actual.groupby(col_regional)[col_valor].sum().reset_index()
                 df_reg = df_reg.sort_values(by=col_valor, ascending=False).head(10)
+                
+                df_reg['Texto_Moneda'] = df_reg[col_valor].apply(lambda x: f"${x:,.0f}")
+
                 fig_reg = px.bar(
                     df_reg, x=col_valor, y=col_regional, orientation='h',
-                    text_auto='.2s', color=col_valor, color_continuous_scale='Blues'
+                    text='Texto_Moneda', color=col_valor, color_continuous_scale='Blues'
                 )
+                fig_reg.update_traces(texttemplate='%{text}', textposition='auto')
                 fig_reg.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False, xaxis_title="Venta ($)", yaxis_title="Regional")
                 st.plotly_chart(fig_reg, use_container_width=True)
             else:
@@ -128,10 +132,14 @@ try:
             if not df_actual.empty:
                 df_cli_top = df_actual.groupby(col_cliente)[col_valor].sum().reset_index()
                 df_cli_top = df_cli_top.sort_values(by=col_valor, ascending=False).head(10)
+                
+                df_cli_top['Texto_Moneda'] = df_cli_top[col_valor].apply(lambda x: f"${x:,.0f}")
+
                 fig_cli = px.bar(
                     df_cli_top, x=col_valor, y=col_cliente, orientation='h',
-                    text_auto='.2s', color=col_valor, color_continuous_scale='Greens'
+                    text='Texto_Moneda', color=col_valor, color_continuous_scale='Greens'
                 )
+                fig_cli.update_traces(texttemplate='%{text}', textposition='auto')
                 fig_cli.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False, xaxis_title="Venta ($)", yaxis_title="Cliente")
                 st.plotly_chart(fig_cli, use_container_width=True)
             else:

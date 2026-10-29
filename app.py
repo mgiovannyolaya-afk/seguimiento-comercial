@@ -1,72 +1,33 @@
 import pandas as pd
 import streamlit as st
 
-# Configuración de la página con diseño ancho
 st.set_page_config(
-    page_title="Gestión Comercial - Meta 70%", page_icon="🎯", layout="wide"
+    page_title="Diagnóstico - Gestión Comercial", page_icon="🔍", layout="wide"
 )
 
-# Título principal del tablero
-st.title("🎯 Control de Oportunidades y Cumplimiento (Meta 70%)")
+st.title("🔍 Diagnóstico del archivo Excel")
 st.markdown(
-    "Monitoreo ejecutivo de ventas, identificación de clientes y control de"
-    " brechas comerciales."
+    "Este panel nos mostrará exactamente cómo lee Streamlit tu archivo"
+    " 'SGTO X CANAL.xlsx'."
 )
-st.markdown("---")
-
-
-# Carga optimizada y rápida usando header directo
-@st.cache_data
-def cargar_datos(origen):
-  # Lee directamente desde la fila de encabezados correcta
-  df = pd.read_excel(origen, header=1)
-
-  # Eliminar columnas basura o vacías (que dicen Unnamed)
-  df = df.loc[
-      :, ~df.columns.astype(str).str.contains("^Unnamed", case=False, na=False)
-  ]
-  df = df.dropna(how="all", axis=1)
-  df = df.dropna(how="all")
-  return df
-
 
 try:
-  # Cargar datos de forma automática desde el repositorio
-  df = cargar_datos("SGTO X CANAL.xlsx")
+  # Revisar las pestañas (hojas) que tiene el archivo Excel
+  excel_file = pd.ExcelFile("SGTO X CANAL.xlsx")
+  st.success(
+      f"¡Archivo encontrado con éxito! Hojas disponibles en el Excel:"
+      f" {excel_file.sheet_names}"
+  )
 
-  # --- TARJETAS DE MÉTRICAS (KPIs) ---
-  col1, col2, col3 = st.columns(3)
+  # Leer el archivo en bruto sin modificar nada para ver su estructura real
+  df_raw = pd.read_excel("SGTO X CANAL.xlsx", header=None)
 
-  total_registros = len(df)
-  col_reserva = [c for c in df.columns if "RESERVA" in str(c).upper()]
-
-  with col1:
-    st.metric(
-        label="📊 Total Registros / Clientes", value=f"{total_registros:,}"
-    )
-
-  with col2:
-    st.metric(label="🎯 Meta de Cumplimiento", value="70%")
-
-  with col3:
-    if col_reserva:
-      # Limpiar y sumar numéricamente
-      total_venta = pd.to_numeric(df[col_reserva[0]], errors="coerce").sum()
-      st.metric(
-          label="💰 Valor Total Acumulado", value=f"${total_venta:,.2f}"
-      )
-    else:
-      st.metric(label="Estado del Sistema", value="Activo")
-
-  st.markdown("---")
-
-  # --- VISUALIZACIÓN DE LA TABLA ---
-  st.subheader("📋 Detalle de Oportunidades")
-  st.dataframe(df, use_container_width=True)
+  st.subheader("Vista previa de las primeras 10 filas del Excel en bruto:")
+  st.dataframe(df_raw.head(10), use_container_width=True)
 
 except Exception as e:
-  st.error(f"No se pudo cargar el archivo automáticamente. Detalle: {e}")
+  st.error(f"No se pudo leer el archivo. Detalle del error: {e}")
   st.info(
-      "Verifica que el archivo 'SGTO X CANAL.xlsx' esté en la misma carpeta"
-      " principal de GitHub."
+      "Asegúrate de que el archivo 'SGTO X CANAL.xlsx' esté subido en la raíz"
+      " principal de tu repositorio en GitHub."
   )

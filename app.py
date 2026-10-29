@@ -1,3 +1,4 @@
+import io
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -95,14 +96,14 @@ try:
   if col_ppto:
     df[col_ppto] = pd.to_numeric(df[col_ppto], errors="coerce").fillna(0)
 
-  # Cálculo directo y exacto del % de Ejecución por Cliente: (TOTAL + RESERVA DIA) / Ppto x Cliente
+  # Cálculo directo y exacto del % de Ejecución por Cliente para cálculos y ordenamiento
   if col_ppto:
-    df["% Eje Mes Calc"] = (df["TOTAL"] + df["RESERVA DIA"]) / df[
+    df["% Eje Mes Num"] = (df["TOTAL"] + df["RESERVA DIA"]) / df[
         col_ppto
     ].replace(0, float("inf"))
-    df["% Eje Mes Calc"] = df["% Eje Mes Calc"].fillna(0)
+    df["% Eje Mes Num"] = df["% Eje Mes Num"].fillna(0)
   else:
-    df["% Eje Mes Calc"] = 0.0
+    df["% Eje Mes Num"] = 0.0
 
   # --- BARRA LATERAL DE FILTROS Y GRÁFICO ---
   st.sidebar.header("🔍 Filtros de Segmentación")
@@ -339,7 +340,7 @@ try:
       col_ppto,
       "TOTAL",
       "RESERVA DIA",
-      "% Eje Mes Calc",
+      "% Eje Mes Num",
   ]
   cols_disponibles = [
       c
@@ -348,7 +349,7 @@ try:
   ]
 
 
-  # Función para formatear valores monetarios y porcentajes en la vista de tabla
+  # Función para formatear valores monetarios y aplicar formato condicional en la tabla
   def formatear_dataframe(df_in):
     df_out = df_in.copy()
     cols_moneda = [
@@ -358,11 +359,20 @@ try:
       df_out[col] = df_out[col].apply(
           lambda x: f"${x:,.0f}" if pd.notnull(x) and x != 0 else "$0"
       )
-    if "% Eje Mes Calc" in df_out.columns:
-      df_out["% Eje Mes Calc"] = df_out["% Eje Mes Calc"].apply(
+    if "% Eje Mes Num" in df_out.columns:
+      df_out["% Eje Mes Num"] = df_out["% Eje Mes Num"].apply(
           lambda x: f"{x * 100:.1f}%" if pd.notnull(x) else "0.0%"
       )
     return df_out
+
+
+  # Función para convertir dataframe a Excel para el botón de descarga
+  def convertir_a_excel(df_to_download):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+      df_to_download.to_excel(writer, index=False, sheet_name="Reporte")
+    processed_data = output.getvalue()
+    return processed_data
 
 
   # Función para renderizar los totales superiores de la tabla
@@ -403,9 +413,8 @@ try:
   with pestana1:
     st.subheader("🔍 Clientes Pendientes por Impactar (Oportunidad)")
     if "IMPACTO" in df_filtrado.columns:
-      df_opp = df_filtrado[df_filtrado["IMPACTO"] == 0]
+      df_opp = df_filtrado[df_filtrado["IMPACTO"] == 0].copy()
 
-      # Métricas solicitadas lado a lado para la pestaña de Oportunidad
       tot_opp = len(df_opp)
       con_reserva_opp = (
           len(df_opp[df_opp["RESERVA DIA"] > 0])
@@ -430,7 +439,37 @@ try:
         )
 
       st.markdown("---")
+
+      # Recomendación: Top Clientes con Mayor Presupuesto en Oportunidad
+      if col_ppto and not df_opp.empty:
+        st.markdown("##### 🏆 Top Clientes con Mayor Oportunidad (Presupuesto)")
+        top_n = st.slider(
+            "Selecciona cuántos clientes top deseas visualizar:",
+            5,
+            50,
+            10,
+            key="slider_top_opp",
+        )
+        df_top_opp = df_opp.sort_values(by=col_ppto, ascending=False).head(top_n)
+        st.dataframe(
+            formatear_dataframe(df_top_opp[cols_disponibles]),
+            use_container_width=True,
+        )
+        st.markdown("---")
+
       mostrar_totales_superiores(df_opp)
+
+      # Botón de Descarga Excel
+      excel_data_opp = convertir_a_excel(df_opp[cols_disponibles])
+      st.download_button(
+          label="📥 Descargar Clientes con Oportunidad en Excel",
+          data=excel_data_opp,
+          file_name="clientes_oportunidad.xlsx",
+          mime=(
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          ),
+      )
+
       st.dataframe(
           formatear_dataframe(df_opp[cols_disponibles]),
           use_container_width=True,
@@ -442,11 +481,23 @@ try:
   with pestana2:
     st.subheader("✅ Clientes Impactados Exitosamente")
     if "IMPACTO" in df_filtrado.columns:
-      df_imp = df_filtrado[df_filtrado["IMPACTO"] == 1]
+      df_imp = df_filtrado[df_filtrado["IMPACTO"] == 1].copy()
       st.metric(
           label="Clientes Impactados en este filtro", value=f"{len(df_imp):,}"
       )
       mostrar_totales_superiores(df_imp)
+
+      # Botón de Descarga Excel
+      excel_data_imp = convertir_a_excel(df_imp[cols_disponibles])
+      st.download_button(
+          label="📥 Descargar Clientes Impactados en Excel",
+          data=excel_data_imp,
+          file_name="clientes_impactados.xlsx",
+          mime=(
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          ),
+      )
+
       st.dataframe(
           formatear_dataframe(df_imp[cols_disponibles]),
           use_container_width=True,
@@ -458,6 +509,18 @@ try:
   with pestana3:
     st.subheader("📋 Base de Datos General (Filtrada)")
     mostrar_totales_superiores(df_filtrado)
+
+    # Botón de Descarga Excel
+    excel_data_gen = convertir_a_excel(df_filtrado[cols_disponibles])
+    st.download_button(
+        label="📥 Descargar Base General en Excel",
+        data=excel_data_gen,
+        file_name="base_comercial_general.xlsx",
+        mime=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+    )
+
     st.dataframe(
         formatear_dataframe(df_filtrado[cols_disponibles]),
         use_container_width=True,

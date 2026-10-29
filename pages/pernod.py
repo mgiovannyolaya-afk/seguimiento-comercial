@@ -179,7 +179,7 @@ try:
 
         st.markdown("---")
 
-        # --- GRÁFICO DE TENDENCIA MENSUAL (LÍNEAS YoY - ALTURA AJUSTADA) ---
+        # --- GRÁFICO DE TENDENCIA MENSUAL (LÍNEAS YoY - ALTURA OPTIMIZADA) ---
         st.subheader(f"📈 Tendencia Mensual de Ventas ({anio_sel} vs {anio_anterior})")
         df_tendencia = df_f[df_f[col_anio].isin([anio_sel, anio_anterior])]
         if not df_tendencia.empty:
@@ -197,7 +197,7 @@ try:
             fig_tend.update_layout(
                 xaxis_title="Mes", 
                 yaxis_title="Venta Total ($)",
-                height=350  # <-- Altura optimizada para que luzca proporcionada
+                height=350
             )
             st.plotly_chart(fig_tend, use_container_width=True)
         else:
@@ -251,7 +251,6 @@ try:
                 pass
             return ''
 
-        # Formatos finales en moneda y porcentajes sin decimales
         format_dict = {
             f'Venta {anio_sel}': '${:,.0f}',
             f'Venta {anio_anterior}': '${:,.0f}',
@@ -267,6 +266,34 @@ try:
 
         st.caption(f"Comparativa activa para: **{', '.join(map(str, meses_sel))}** ({anio_sel} vs. {anio_anterior})")
         st.dataframe(tabla_estilizada, use_container_width=True)
+
+        st.markdown("---")
+
+        # --- NUEVA SECCIÓN: CLIENTES INACTIVOS (Compraron antes pero tienen $0 en el año actual) ---
+        st.subheader(f"⚠️ Clientes Inactivos (Compraron en {anio_anterior} pero tienen $0 en {anio_sel})")
+        st.caption("Esta lista muestra a los clientes que registran compras el año pasado para el período seleccionado, pero cuyas ventas actuales están en cero. Útil para gestión comercial de rescate.")
+
+        # Filtrar clientes con venta > 0 en año anterior y 0 en año actual
+        tabla_inactivos = tabla_final[
+            (tabla_final[f'Venta {anio_anterior}'].str.replace('$', '').str.replace(',', '').astype(float) > 0) & 
+            (tabla_final[f'Venta {anio_sel}'] == 0)
+        ] if 'Venta ' + str(anio_sel) in tabla_final.columns else pd.DataFrame()
+
+        # Re-filtro más directo sobre los datos numéricos antes de formatear
+        ventas_act_num = df_actual.groupby(col_cliente)[col_valor].sum()
+        ventas_ant_num = df_ant.groupby(col_cliente)[col_valor].sum()
+        
+        clientes_cero = set(ventas_ant_num[ventas_ant_num > 0].index) - set(ventas_act_num[ventas_act_num > 0].index)
+        
+        df_inactivos_final = df_ant[df_ant[col_cliente].isin(clientes_cero)].groupby(col_cliente)[col_valor].sum().reset_index()
+        df_inactivos_final.rename(columns={col_valor: f'Venta Histórica {anio_anterior}'}, inplace=True)
+        df_inactivos_final = df_inactivos_final.sort_values(by=f'Venta Histórica {anio_anterior}', ascending=False)
+
+        if not df_inactivos_final.empty:
+            df_inactivos_final[f'Venta Histórica {anio_anterior}'] = df_inactivos_final[f'Venta Histórica {anio_anterior}'].apply(lambda x: f"${x:,.0f}")
+            st.dataframe(df_inactivos_final, use_container_width=True)
+        else:
+            st.success("🎉 ¡Excelente noticia! No hay clientes inactivos para los filtros y meses seleccionados; todos han mantenido compras.")
 
     else:
         st.warning("⚠️ Selecciona un Año Base y al menos un Mes.")

@@ -251,13 +251,11 @@ try:
       "📋 Detalle Comercial General",
   ])
 
-  # Columnas a mostrar incluyendo Supervisor, Vendedor y Código UN
-  columnas_principales = [
+  # Columnas para la TABLA (Excluyendo Supervisor y Vendedor visualmente)
+  columnas_tabla = [
       col_un,
       "Canal",
-      "Supervisor",
       "Zona",
-      "Vendedor",
       "Nit Cliente",
       "Nombre Cliente",
       "Ciudad",
@@ -268,7 +266,7 @@ try:
   ]
   cols_disponibles = [
       c
-      for c in columnas_principales
+      for c in columnas_tabla
       if c is not None and c in df_filtrado.columns
   ]
 

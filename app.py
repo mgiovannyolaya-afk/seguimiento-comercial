@@ -6,7 +6,7 @@ st.set_page_config(
     page_title="Gestión Comercial - Meta 70%", page_icon="🎯", layout="wide"
 )
 
-# Estilo visual corporativo
+# Estilo visual corporativo limpio
 st.markdown("""
     <style>
         .main { background-color: #f8f9fa; }
@@ -17,7 +17,7 @@ st.markdown("""
 # Título principal del tablero
 st.title("🎯 Control de Oportunidades y Cumplimiento (Meta 70%)")
 st.markdown(
-    "Monitoreo interactivo de ejecución de impactos, canales y ventas."
+    "Monitoreo interactivo de canales, ejecución de impactos y ventas totales."
 )
 st.markdown("---")
 
@@ -38,7 +38,7 @@ try:
   # --- BARRA LATERAL DE FILTROS INTERACTIVOS ---
   st.sidebar.header("🔍 Filtros de Segmentación")
 
-  # 1. Filtro de Canal (¡Nuevo!)
+  # 1. Filtro de Canal (Muestra todos los canales de la hoja)
   canales = ["Todos"] + sorted(
       df["Canal"].dropna().astype(str).unique().tolist()
   )
@@ -90,15 +90,17 @@ try:
       (impactados_count / total_clientes * 100) if total_clientes > 0 else 0
   )
 
-  # Suma de ventas totales según la columna 'TOTAL' de la hoja Export
+  # Suma dinámica de ventas totales y reservas
   total_ventas = (
       pd.to_numeric(df_filtrado["TOTAL"], errors="coerce").sum()
       if "TOTAL" in df_filtrado.columns
       else 0
   )
-  total_reserva = pd.to_numeric(
-      df_filtrado["Reserva"], errors="coerce"
-  ).sum()
+  total_reserva = (
+      pd.to_numeric(df_filtrado["Reserva"], errors="coerce").sum()
+      if "Reserva" in df_filtrado.columns
+      else 0
+  )
 
   # --- TARJETAS DE MÉTRICAS SUPERIORES (KPIs) ---
   col1, col2, col3, col4, col5 = st.columns(5)
@@ -123,7 +125,10 @@ try:
   # Barra de progreso visual para el porcentaje de ejecución de impactos
   st.progress(
       min(max(porcentaje_ejecucion / 100.0, 0.0), 1.0),
-      text=f"Progreso de Ejecución de Impactos: {porcentaje_ejecucion:.1f}%",
+      text=(
+          f"Progreso de Ejecución de Impactos ({impact_txt if 'impact_txt' in locals() else 'Filtro Actual'}):"
+          f" {porcentaje_ejecucion:.1f}%"
+      ),
   )
   st.markdown("---")
 

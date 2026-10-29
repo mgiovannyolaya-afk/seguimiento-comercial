@@ -1,10 +1,12 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 
 # Configuración de la página en modo ancho
-st.set_page_config(page_title="Seguimiento BV Pernod", layout="wide")
+st.set_page_config(page_title="Seguimiento BV Pernod - Interactivo", layout="wide")
 
-st.title("🍾 Seguimiento BV Pernod - Análisis Comercial y Crecimiento YoY")
+st.title("🍾 Seguimiento BV Pernod - Dashboard Comercial Interactivo")
 st.markdown("---")
 
 # Función optimizada para cargar el archivo .xlsb
@@ -37,7 +39,7 @@ try:
     col_valor = st.sidebar.selectbox("Venta / Valor", columnas, index=buscar_indice(['venta', 'valor', 'total', 'neto'], 6))
 
     st.sidebar.divider()
-    st.sidebar.header("🎯 Filtros Interactivos")
+    st.sidebar.header("🎯 Filtros Dinámicos")
 
     df_f = df.copy()
 
@@ -72,8 +74,6 @@ try:
     df_f[col_anio] = pd.to_numeric(df_f[col_anio], errors='coerce')
 
     # --- CUERPO PRINCIPAL ---
-    st.subheader("📋 Comparativa de Ventas por Cliente (Año Actual vs. Año Anterior)")
-
     if anios_sel and meses_sel:
         anio_sel = max(anios_sel)
         anio_anterior = anio_sel - 1
@@ -84,6 +84,56 @@ try:
         # Filtrar año anterior y los mismos meses
         df_ant = df_f[(df_f[col_anio] == anio_anterior) & (df_f[col_mes].isin(meses_sel))]
 
+        # Totales para KPIs
+        total_actual = df_actual[col_valor].sum()
+        total_anterior = df_ant[col_valor].sum()
+        crecimiento_global = ((total_actual / total_anterior) - 1) * 100 if total_anterior > 0 else 0
+
+        # Mostrar Tarjetas KPI Superiores
+        kpi1, kpi2, kpi3 = st.columns(3)
+        kpi1.metric(label=f"Ventas Total ({anio_sel})", value=f"${total_actual:,.0f}")
+        kpi2.metric(label=f"Ventas Total ({anio_anterior})", value=f"${total_anterior:,.0f}", delta=f"{crecimiento_global:,.2f}% YoY")
+        kpi3.metric(label="Meses Evaluados", value=f"{len(meses_sel)} mes(es)")
+
+        st.markdown("---")
+
+        # --- SECCIÓN DE GRÁFICOS INTERACTIVOS ---
+        col_g1, col_g2 = st.columns(2)
+
+        with col_g1:
+            st.subheader(f"📊 Ventas por Regional ({anio_sel})")
+            if not df_actual.empty:
+                df_reg = df_actual.groupby(col_regional)[col_valor].sum().reset_index()
+                fig_reg = px.bar(
+                    df_reg, x=col_regional, y=col_valor, 
+                    text_auto='.2s', color=col_regional,
+                    color_discrete_sequence=px.colors.qualitative.Prism
+                )
+                fig_reg.update_layout(showlegend=False, xaxis_title="Regional", yaxis_title="Venta ($)")
+                st.plotly_chart(fig_reg, use_container_width=True)
+            else:
+                st.info("No hay datos para mostrar en este gráfico con los filtros actualizados.")
+
+        with col_g2:
+            st.subheader("🏆 Top 10 Clientes")
+            if not df_actual.empty:
+                df_cli_top = df_actual.groupby(col_cliente)[col_valor].sum().reset_index()
+                df_cli_top = df_cli_top.sort_values(by=col_valor, ascending=False).head(10)
+                fig_cli = px.bar(
+                    df_cli_top, x=col_valor, y=col_cliente, orientation='h',
+                    text_auto='.2s', color=col_valor,
+                    color_colorscale='Blues'
+                )
+                fig_cli.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False, xaxis_title="Venta ($)", yaxis_title="Cliente")
+                st.plotly_chart(fig_cli, use_container_width=True)
+            else:
+                st.info("No hay datos para mostrar en este gráfico.")
+
+        st.markdown("---")
+
+        # --- TABLA DETALLADA DE CLIENTES (YoY) ---
+        st.subheader("📋 Detalle y Crecimiento por Cliente (Año Actual vs. Año Anterior)")
+
         # Agrupar ventas por cliente
         ventas_actual = df_actual.groupby(col_cliente)[col_valor].sum().reset_index()
         ventas_actual.rename(columns={col_valor: f'Venta {anio_sel}'}, inplace=True)
@@ -91,24 +141,28 @@ try:
         ventas_anterior = df_ant.groupby(col_cliente)[col_valor].sum().reset_index()
         ventas_anterior.rename(columns={col_valor: f'Venta {anio_anterior}'}, inplace=True)
 
-        # Unir tablas por cliente de forma limpia
+        # Unir tablas por cliente
         tabla_final = pd.merge(ventas_actual, ventas_anterior, on=col_cliente, how='outer').fillna(0)
 
-        # Calcular variaciones absolutas y porcentuales
+        # Calcular variaciones
         tabla_final['Variación ($)'] = tabla_final[f'Venta {anio_sel}'] - tabla_final[f'Venta {anio_anterior}']
         tabla_final['Variación (%)'] = ((tabla_final[f'Venta {anio_sel}'] / tabla_final[f'Venta {anio_anterior}'].replace(0, 1)) - 1) * 100
         
-        # Aplicar formato de moneda a las columnas financieras
+        # Ordenar de mayor a menor venta actual
+        tabla_final = tabla_final.sort_values(by=f'Venta {anio_sel}', ascending=False)
+
+        # Formato moneda para ventas y variación absoluta
         for col_m in [f'Venta {anio_sel}', f'Venta {anio_anterior}', 'Variación ($)']:
             tabla_final[col_m] = tabla_final[col_m].apply(lambda x: f"${x:,.0f}")
 
-        # Formato de porcentaje
+        # Formato porcentaje
         tabla_final['Variación (%)'] = tabla_final['Variación (%)'].apply(lambda x: f"{x:,.2f}%")
 
-        st.info(f"Mostrando comparativa para los meses: **{', '.join(map(str, meses_sel))}** ({anio_sel} vs. {anio_anterior})")
+        st.caption(f"Comparativa para los meses: **{', '.join(map(str, meses_sel))}** ({anio_sel} vs. {anio_anterior})")
         st.dataframe(tabla_final, use_container_width=True)
+
     else:
-        st.warning("⚠️ Por favor selecciona al menos un Año y un Mes en la barra lateral para generar la comparativa.")
+        st.warning("⚠️ Por favor selecciona al menos un Año y un Mes en la barra lateral para generar el dashboard.")
 
 except Exception as e:
     st.error(f"Ocurrió un error al procesar el archivo o las columnas: {e}")

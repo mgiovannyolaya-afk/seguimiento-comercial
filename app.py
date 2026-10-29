@@ -7,7 +7,7 @@ st.set_page_config(
     page_title="Gestión Comercial - Meta 70%", page_icon="🎯", layout="wide"
 )
 
-# Estilo visual corporativo y tarjetas personalizadas para evitar recortes (...)
+# Estilo visual corporativo y tarjetas personalizadas con no-wrap para evitar saltos de línea
 st.markdown("""
     <style>
         .main { background-color: #f8f9fa; }
@@ -26,9 +26,10 @@ st.markdown("""
             margin-bottom: 5px;
         }
         .metric-value {
-            font-size: 22px;
+            font-size: 20px;
             color: #212529;
             font-weight: 700;
+            white-space: nowrap; /* Evita que el número se parta en varias líneas */
         }
         .metric-delta {
             font-size: 12px;
@@ -150,15 +151,14 @@ try:
       (impactados_count / total_clientes * 100) if total_clientes > 0 else 0
   )
 
-  # Totales completos en pesos
+  # Totales completos en pesos (redondeados a enteros para mayor limpieza)
   total_ventas = df_filtrado["TOTAL"].sum()
   total_reserva_dia = df_filtrado["RESERVA DIA"].sum()
 
-  # Formatear montos en pesos con separadores de miles y sin recortes
-  str_ventas = f"${total_ventas:,.2f}"
-  str_reserva = f"${total_reserva_dia:,.2f}"
+  str_ventas = f"${total_ventas:,.0f}"
+  str_reserva = f"${total_reserva_dia:,.0f}"
 
-  # --- TARJETAS SUPERIORES CON HTML PERSONALIZADO (Sin recortes) ---
+  # --- TARJETAS SUPERIORES CON HTML PERSONALIZADO ---
   col1, col2, col3, col4, col5 = st.columns(5)
 
   with col1:
@@ -200,7 +200,7 @@ try:
         f"""
             <div class="metric-card">
                 <div class="metric-title">💰 Venta Total ($)</div>
-                <div class="metric-value" style="font-size: 18px;">{str_ventas}</div>
+                <div class="metric-value">{str_ventas}</div>
             </div>
         """,
         unsafe_allow_html=True,
@@ -211,7 +211,7 @@ try:
         f"""
             <div class="metric-card">
                 <div class="metric-title">🔥 Reserva Día ($)</div>
-                <div class="metric-value" style="font-size: 18px;">{str_reserva}</div>
+                <div class="metric-value">{str_reserva}</div>
             </div>
         """,
         unsafe_allow_html=True,
@@ -232,7 +232,6 @@ try:
       "📋 Detalle Comercial General",
   ])
 
-  # Columnas clave para mostrar ordenadas
   columnas_principales = [
       "Canal",
       "Supervisor",
@@ -283,4 +282,4 @@ try:
     )
 
 except Exception as e:
-  st.error(f"Error al procesar los datos: {e}")
+  st.error(f"Ocurrió un error al procesar los datos: {e}")

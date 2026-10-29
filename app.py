@@ -7,17 +7,22 @@ st.set_page_config(
     page_title="Gestión Comercial - Meta 70%", page_icon="🎯", layout="wide"
 )
 
-# Estilo visual corporativo y tarjetas personalizadas con no-wrap
+# Estilo visual corporativo y tarjetas personalizadas con tamaño uniforme
 st.markdown("""
     <style>
         .main { background-color: #f8f9fa; }
         .metric-card {
             background-color: #ffffff;
-            padding: 12px;
+            padding: 10px;
             border-radius: 10px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             text-align: center;
             border: 1px solid #e9ecef;
+            height: 105px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
         .summary-box {
             background-color: #e8f4fd;
@@ -30,21 +35,21 @@ st.markdown("""
             margin-bottom: 15px;
         }
         .metric-title {
-            font-size: 12px;
+            font-size: 11px;
             color: #6c757d;
             font-weight: 600;
-            margin-bottom: 4px;
+            margin-bottom: 3px;
         }
         .metric-value {
-            font-size: 16px;
+            font-size: 14px;
             color: #212529;
             font-weight: 700;
             white-space: nowrap;
         }
         .metric-delta {
-            font-size: 11px;
+            font-size: 10px;
             color: #28a745;
-            margin-top: 4px;
+            margin-top: 2px;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -205,7 +210,7 @@ try:
       int(df_filtrado["IMPACTO"].sum()) if "IMPACTO" in df_filtrado.columns else 0
   )
   oportunidad_count = total_clientes - impactados_count
-  porcentaje_ejecucion = (
+  porcentaje_ejecucion_impactos = (
       (impactados_count / total_clientes * 100) if total_clientes > 0 else 0
   )
 
@@ -223,75 +228,21 @@ try:
       else 0
   )
 
-  # Lógica solicitada: Presupuesto - (Venta + Reserva)
   venta_mas_reserva = total_ventas + total_reserva_dia
   falta_cumplir = max(0, total_ppto_gen - venta_mas_reserva)
+  porcentaje_ejecucion_volumen = (
+      (venta_mas_reserva / total_ppto_gen * 100) if total_ppto_gen > 0 else 0
+  )
 
+  str_ppto = f"${total_ppto_gen:,.0f}"
   str_ventas = f"${total_ventas:,.0f}"
   str_reserva = f"${total_reserva_dia:,.0f}"
-  str_ppto = f"${total_ppto_gen:,.0f}"
   str_falta = f"${falta_cumplir:,.0f}"
 
-  # --- TARJETAS SUPERIORES (7 columnas) ---
+  # --- TARJETAS SUPERIORES (7 columnas en orden exacto solicitado) ---
   col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
 
   with col1:
-    st.markdown(
-        f"""
-            <div class="metric-card">
-                <div class="metric-title">📊 Clientes</div>
-                <div class="metric-value">{total_clientes:,}</div>
-            </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-  with col2:
-    st.markdown(
-        f"""
-            <div class="metric-card">
-                <div class="metric-title">✅ Impactados</div>
-                <div class="metric-value">{impactados_count:,}</div>
-                <div class="metric-delta">{porcentaje_ejecucion:.1f}% Ejec.</div>
-            </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-  with col3:
-    st.markdown(
-        f"""
-            <div class="metric-card">
-                <div class="metric-title">⚠️ Oportunidad</div>
-                <div class="metric-value">{oportunidad_count:,}</div>
-            </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-  with col4:
-    st.markdown(
-        f"""
-            <div class="metric-card">
-                <div class="metric-title">💰 Venta Total</div>
-                <div class="metric-value">{str_ventas}</div>
-            </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-  with col5:
-    st.markdown(
-        f"""
-            <div class="metric-card">
-                <div class="metric-title">🔥 Reserva Día</div>
-                <div class="metric-value">{str_reserva}</div>
-            </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-  with col6:
     st.markdown(
         f"""
             <div class="metric-card">
@@ -302,7 +253,29 @@ try:
         unsafe_allow_html=True,
     )
 
-  with col7:
+  with col2:
+    st.markdown(
+        f"""
+            <div class="metric-card">
+                <div class="metric-title">💰 Venta Total</div>
+                <div class="metric-value">{str_ventas}</div>
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+  with col3:
+    st.markdown(
+        f"""
+            <div class="metric-card">
+                <div class="metric-title">🔥 Reserva Día</div>
+                <div class="metric-value">{str_reserva}</div>
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+  with col4:
     st.markdown(
         f"""
             <div class="metric-card">
@@ -313,11 +286,52 @@ try:
         unsafe_allow_html=True,
     )
 
-  # Barra de progreso visual
+  with col5:
+    st.markdown(
+        f"""
+            <div class="metric-card">
+                <div class="metric-title">✅ Impactados</div>
+                <div class="metric-value">{impactados_count:,}</div>
+                <div class="metric-delta">{porcentaje_ejecucion_impactos:.1f}% Ejec.</div>
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+  with col6:
+    st.markdown(
+        f"""
+            <div class="metric-card">
+                <div class="metric-title">⚠️ Oportunidad</div>
+                <div class="metric-value">{oportunidad_count:,}</div>
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+  with col7:
+    st.markdown(
+        f"""
+            <div class="metric-card">
+                <div class="metric-title">📊 Total Clientes</div>
+                <div class="metric-value">{total_clientes:,}</div>
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+  # Barras de progreso visuales solicitadas
   st.markdown("<br>", unsafe_allow_html=True)
   st.progress(
-      min(max(porcentaje_ejecucion / 100.0, 0.0), 1.0),
-      text=f"Progreso de Ejecución de Impactos: {porcentaje_ejecucion:.1f}%",
+      min(max(porcentaje_ejecucion_impactos / 100.0, 0.0), 1.0),
+      text=f"Progreso de Ejecución de Impactos: {porcentaje_ejecucion_impactos:.1f}%",
+  )
+  st.progress(
+      min(max(porcentaje_ejecucion_volumen / 100.0, 0.0), 1.0),
+      text=(
+          "Progreso de Ejecución de Volumen:"
+          f" {porcentaje_ejecucion_volumen:.1f}%"
+      ),
   )
   st.markdown("---")
 
@@ -439,7 +453,7 @@ try:
         formatear_dataframe(df_filtrado[cols_disponibles]),
         use_container_width=True,
         height=420,
-      )
+    )
 
 except Exception as e:
   st.error(

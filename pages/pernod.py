@@ -269,17 +269,10 @@ try:
 
         st.markdown("---")
 
-        # --- NUEVA SECCIÓN: CLIENTES INACTIVOS (Compraron antes pero tienen $0 en el año actual) ---
+        # --- SECCIÓN: CLIENTES INACTIVOS (Corrección del error de tipo flotante) ---
         st.subheader(f"⚠️ Clientes Inactivos (Compraron en {anio_anterior} pero tienen $0 en {anio_sel})")
-        st.caption("Esta lista muestra a los clientes que registran compras el año pasado para el período seleccionado, pero cuyas ventas actuales están en cero. Útil para gestión comercial de rescate.")
+        st.caption(f"Esta lista muestra a los clientes que registran compras en {anio_anterior} para el período seleccionado, pero cuyas ventas actuales en {anio_sel} están en cero.")
 
-        # Filtrar clientes con venta > 0 en año anterior y 0 en año actual
-        tabla_inactivos = tabla_final[
-            (tabla_final[f'Venta {anio_anterior}'].str.replace('$', '').str.replace(',', '').astype(float) > 0) & 
-            (tabla_final[f'Venta {anio_sel}'] == 0)
-        ] if 'Venta ' + str(anio_sel) in tabla_final.columns else pd.DataFrame()
-
-        # Re-filtro más directo sobre los datos numéricos antes de formatear
         ventas_act_num = df_actual.groupby(col_cliente)[col_valor].sum()
         ventas_ant_num = df_ant.groupby(col_cliente)[col_valor].sum()
         
@@ -293,7 +286,7 @@ try:
             df_inactivos_final[f'Venta Histórica {anio_anterior}'] = df_inactivos_final[f'Venta Histórica {anio_anterior}'].apply(lambda x: f"${x:,.0f}")
             st.dataframe(df_inactivos_final, use_container_width=True)
         else:
-            st.success("🎉 ¡Excelente noticia! No hay clientes inactivos para los filtros y meses seleccionados; todos han mantenido compras.")
+            st.success(f"🎉 ¡Excelente noticia! No hay clientes inactivos para los filtros y meses seleccionados entre {anio_anterior} y {anio_sel}.")
 
     else:
         st.warning("⚠️ Selecciona un Año Base y al menos un Mes.")

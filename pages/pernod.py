@@ -13,24 +13,25 @@ try:
     df = cargar_datos()
     columnas = df.columns.tolist()
 
-    # Función robusta para asignar índices distintos por defecto y evitar duplicados
-    def safe_index(keywords, default_pos):
-        for kw in keywords:
+    # Función inteligente para buscar la columna exacta
+    def buscar_indice(palabras_clave, posicion_por_defecto):
+        for palabra in palabras_clave:
             for idx, col in enumerate(columnas):
-                if kw.lower() in str(col).lower():
+                if palabra.lower() in str(col).lower():
                     return idx
-        return min(default_pos, len(columnas) - 1)
+        return min(posicion_por_defecto, len(columnas) - 1)
 
     st.sidebar.header("⚙️ Configuración de Columnas")
-    st.sidebar.caption("Verifica que cada selector tenga su columna respectiva:")
+    st.sidebar.caption("Asigna cada campo con su columna correspondiente:")
     
-    col_canal = st.sidebar.selectbox("Columna de Canal", columnas, index=safe_index(['canal'], 0))
-    col_regional = st.sidebar.selectbox("Columna de Regional / Zona", columnas, index=safe_index(['regional', 'zona', 'reg'], 1))
-    col_gerente = st.sidebar.selectbox("Columna de Gerente de Unidad', 'gerente", columnas, index=safe_index(['gerente', 'unidad', 'jefe'], 2))
-    col_cliente = st.sidebar.selectbox("Columna de Cliente", columnas, index=safe_index(['cliente', 'tercero', 'nombre'], 3))
-    col_anio = st.sidebar.selectbox("Columna de Año", columnas, index=safe_index(['año', 'anio', 'year'], 4))
-    col_mes = st.sidebar.selectbox("Columna de Mes", columnas, index=safe_index(['mes', 'month'], 5))
-    col_valor = st.sidebar.selectbox("Columna de Venta / Valor", columnas, index=safe_index(['venta', 'valor', 'total', 'neto'], 6))
+    # Asignamos índices predeterminados separados para que no coincidan todos en la misma columna
+    col_canal = st.sidebar.selectbox("Columna de Canal", columnas, index=buscar_indice(['canal'], 0))
+    col_regional = st.sidebar.selectbox("Columna de Regional / Zona", columnas, index=buscar_indice(['regional', 'zona', 'reg'], 1))
+    col_gerente = st.sidebar.selectbox("Columna de Gerente de Unidad", columnas, index=buscar_indice(['gerente', 'unidad', 'jefe'], 2))
+    col_cliente = st.sidebar.selectbox("Columna de Cliente", columnas, index=buscar_indice(['cliente', 'tercero', 'nombre'], 3))
+    col_anio = st.sidebar.selectbox("Columna de Año", columnas, index=buscar_indice(['año', 'anio', 'year'], 4))
+    col_mes = st.sidebar.selectbox("Columna de Mes", columnas, index=buscar_indice(['mes', 'month'], 5))
+    col_valor = st.sidebar.selectbox("Columna de Venta / Valor", columnas, index=buscar_indice(['venta', 'valor', 'total', 'neto'], 6))
 
     st.sidebar.divider()
     st.sidebar.header("🎯 Filtros Interactivos")

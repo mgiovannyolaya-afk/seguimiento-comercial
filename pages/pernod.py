@@ -41,7 +41,7 @@ try:
     df[col_valor] = pd.to_numeric(df[col_valor], errors='coerce').fillna(0)
     df[col_anio] = pd.to_numeric(df[col_anio], errors='coerce')
 
-    # --- BARRA LATERAL: FILTROS ---
+    # --- BARRA LATERAL: FILTROS PRINCIPALES ---
     st.sidebar.header("🎯 Filtros")
 
     df_f = df.copy()
@@ -64,13 +64,6 @@ try:
     if sel_gerente != "Todos":
         df_f = df_f[df_f[col_gerente].astype(str) == sel_gerente]
 
-    st.sidebar.divider()
-    
-    # 4. Buscador por nombre de cliente
-    busqueda_cliente = st.sidebar.text_input("🔍 Buscar Cliente por Nombre", "")
-    if busqueda_cliente:
-        df_f = df_f[df_f[col_cliente].astype(str).str.contains(busqueda_cliente, case=False, na=False)]
-
     # --- CUERPO PRINCIPAL: FILTROS DE AÑO Y MESES ARRIBA ---
     st.subheader("📅 Panel de Control Temporal")
     
@@ -81,7 +74,7 @@ try:
         anio_base = st.selectbox("Selecciona el Año Base:", anios_disp, index=len(anios_disp)-1 if anios_disp else 0)
 
     with col_f2:
-        # Orden cronológico estricto para los meses (admite abreviaturas y nombres completos)
+        # Orden cronológico estricto para los meses
         meses_unicos = df_f[col_mes].dropna().unique()
         orden_meses_ref = [
             "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
@@ -157,7 +150,7 @@ try:
                 st.info("Sin datos para los filtros seleccionados.")
 
         with col_g2:
-            st.subheader("🏆 Top Clientes (Filtrados)")
+            st.subheader("🏆 Top Clientes")
             if not df_actual.empty:
                 df_cli_top = df_actual.groupby(col_cliente)[col_valor].sum().reset_index()
                 df_cli_top = df_cli_top.sort_values(by=col_valor, ascending=False).head(10)
@@ -186,8 +179,11 @@ try:
 
         st.markdown("---")
 
-        # --- TABLA COMPARATIVA DE CLIENTES ---
+        # --- TABLA COMPARATIVA DE CLIENTES CON BUSCADOR INTEGRADO ---
         st.subheader("📋 Detalle por Cliente (Año Actual vs. Año Anterior)")
+
+        # Buscador específico colocado justo encima de la tabla
+        busqueda_tabla = st.text_input("🔍 Escribe el nombre del cliente para buscar en la tabla:", "")
 
         ventas_actual = df_actual.groupby(col_cliente)[col_valor].sum().reset_index()
         ventas_actual.rename(columns={col_valor: f'Venta {anio_sel}'}, inplace=True)
@@ -201,6 +197,10 @@ try:
         tabla_final['Variación (%)'] = ((tabla_final[f'Venta {anio_sel}'] / tabla_final[f'Venta {anio_anterior}'].replace(0, 1)) - 1) * 100
         
         tabla_final = tabla_final.sort_values(by=f'Venta {anio_sel}', ascending=False)
+
+        # Filtrar la tabla en tiempo real si el usuario escribe en el buscador
+        if busqueda_tabla:
+            tabla_final = tabla_final[tabla_final[col_cliente].astype(str).str.contains(busqueda_tabla, case=False, na=False)]
 
         # Formatos finales en moneda y porcentajes sin decimales
         for col_m in [f'Venta {anio_sel}', f'Venta {anio_anterior}', 'Variación ($)']:

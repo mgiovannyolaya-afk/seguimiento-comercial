@@ -127,11 +127,11 @@ try:
       (impactados_count / total_clientes * 100) if total_clientes > 0 else 0
   )
 
-  # Totales en pesos (Ventas 'TOTAL' y Reserva actualizada 'RESERVA DIA')
+  # Totales completos en pesos
   total_ventas = df_filtrado["TOTAL"].sum()
   total_reserva_dia = df_filtrado["RESERVA DIA"].sum()
 
-  # --- TARJETAS DE MÉTRICAS SUPERIORES (KPIs) ---
+  # --- TARJETAS DE MÉTRICAS SUPERIORES (KPIs) con valor completo ---
   col1, col2, col3, col4, col5 = st.columns(5)
 
   with col1:
@@ -147,11 +147,13 @@ try:
         label="⚠️ Con Oportunidad (Falta)", value=f"{oportunidad_count:,}"
     )
   with col4:
-    st.metric(label="💰 Venta Total ($)", value=f"${total_ventas:,.0f}")
+    st.metric(
+        label="💰 Venta Total ($)", value=f"${total_ventas:,.2f}"
+    )  # Valor completo con decimales
   with col5:
     st.metric(
-        label="🔥 Reserva Día ($)", value=f"${total_reserva_dia:,.0f}"
-    )
+        label="🔥 Reserva Día ($)", value=f"${total_reserva_dia:,.2f}"
+    )  # Valor completo con decimales
 
   # Barra de progreso visual para el porcentaje de ejecución
   st.progress(

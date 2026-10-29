@@ -80,7 +80,7 @@ try:
     if col in df.columns:
       df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-  # Buscar columnas de presupuesto y la columna de % Eje Mes
+  # Buscar columna de presupuesto con nombres flexibles
   col_ppto = next(
       (
           c
@@ -91,30 +91,18 @@ try:
       ),
       None,
   )
-  col_eje_mes = next(
-      (
-          c
-          for c in df.columns
-          if "eje" in c.lower()
-          and "mes" in c.lower()
-          and "decre" not in c.lower()
-      ),
-      None,
-  )
-  if not col_eje_mes:
-    col_eje_mes = next(
-        (
-            c
-            for c in df.columns
-            if "%" in c and "mes" in c.lower() and "decre" not in c.lower()
-        ),
-        None,
-    )
 
   if col_ppto:
     df[col_ppto] = pd.to_numeric(df[col_ppto], errors="coerce").fillna(0)
-  if col_eje_mes:
-    df[col_eje_mes] = pd.to_numeric(df[col_eje_mes], errors="coerce").fillna(0)
+
+  # Cálculo directo y exacto del % de Ejecución por Cliente: (TOTAL + RESERVA DIA) / Ppto x Cliente
+  if col_ppto:
+    df["% Eje Mes Calc"] = (df["TOTAL"] + df["RESERVA DIA"]) / df[
+        col_ppto
+    ].replace(0, float("inf"))
+    df["% Eje Mes Calc"] = df["% Eje Mes Calc"].fillna(0)
+  else:
+    df["% Eje Mes Calc"] = 0.0
 
   # --- BARRA LATERAL DE FILTROS Y GRÁFICO ---
   st.sidebar.header("🔍 Filtros de Segmentación")
@@ -239,7 +227,7 @@ try:
   str_reserva = f"${total_reserva_dia:,.0f}"
   str_falta = f"${falta_cumplir:,.0f}"
 
-  # --- TARJETAS SUPERIORES (Orden exacto: Presupuesto, Venta, Reserva, Falta, Clientes, Impactados, Oportunidad) ---
+  # --- TARJETAS SUPERIORES ---
   col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
 
   with col1:
@@ -342,7 +330,7 @@ try:
       "📋 Detalle Comercial General",
   ])
 
-  # Columnas seleccionadas para la TABLA
+  # Columnas seleccionadas para la TABLA ordenadas estrictamente como pediste
   columnas_tabla = [
       "Canal",
       "Zona",
@@ -351,7 +339,7 @@ try:
       col_ppto,
       "TOTAL",
       "RESERVA DIA",
-      col_eje_mes,
+      "% Eje Mes Calc",
   ]
   cols_disponibles = [
       c
@@ -360,7 +348,7 @@ try:
   ]
 
 
-  # Función para formatear valores monetarios y porcentajes en la vista
+  # Función para formatear valores monetarios y porcentajes en la vista de tabla
   def formatear_dataframe(df_in):
     df_out = df_in.copy()
     cols_moneda = [
@@ -370,14 +358,14 @@ try:
       df_out[col] = df_out[col].apply(
           lambda x: f"${x:,.0f}" if pd.notnull(x) and x != 0 else "$0"
       )
-    if col_eje_mes and col_eje_mes in df_out.columns:
-      df_out[col_eje_mes] = df_out[col_eje_mes].apply(
+    if "% Eje Mes Calc" in df_out.columns:
+      df_out["% Eje Mes Calc"] = df_out["% Eje Mes Calc"].apply(
           lambda x: f"{x * 100:.1f}%" if pd.notnull(x) else "0.0%"
       )
     return df_out
 
 
-  # Función para renderizar los totales superiores de la tabla
+  # Función para renderizar los totales superiores de la tabla (calculado con la suma filtrada)
   def mostrar_totales_superiores(df_sub):
     t_ppto = (
         df_sub[col_ppto].sum() if col_ppto and col_ppto in df_sub.columns else 0
@@ -387,9 +375,9 @@ try:
         df_sub["RESERVA DIA"].sum() if "RESERVA DIA" in df_sub.columns else 0
     )
 
-    t_eje = 0
-    if col_eje_mes and col_eje_mes in df_sub.columns and len(df_sub) > 0:
-      t_eje = df_sub[col_eje_mes].mean() * 100
+    t_eje = (
+        ((t_venta + t_reserva) / t_ppto * 100) if t_ppto > 0 else 0
+    )  # Ponderado real de la vista filtrada
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
@@ -409,7 +397,7 @@ try:
       )
     with c4:
       st.markdown(
-          f"<div class='summary-box'>📈 Promedio % Eje Mes<br><b>{t_eje:.1f}%</b></div>",
+          f"<div class='summary-box'>📈 % Eje Mes (Filtro)<br><b>{t_eje:.1f}%</b></div>",
           unsafe_allow_html=True,
       )
 

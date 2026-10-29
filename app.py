@@ -15,37 +15,29 @@ st.markdown(
 st.markdown("---")
 
 
-# Función para cargar y limpiar los datos del Excel
+# Carga optimizada y rápida usando header directo
 @st.cache_data
-def cargar_y_limpiar_datos(origen):
-  df_raw = pd.read_excel(origen, header=None)
-  fila_encabezado = 0
-  for index, row in df_raw.iterrows():
-    if "GU" in row.values:
-      fila_encabezado = index
-      break
+def cargar_datos(origen):
+  # Lee directamente desde la fila de encabezados correcta
+  df = pd.read_excel(origen, header=1)
 
-  df = pd.read_excel(origen, header=fila_encabezado)
-
-  # Limpiar columnas basura (Unnamed o vacías)
+  # Eliminar columnas basura o vacías (que dicen Unnamed)
   df = df.loc[
       :, ~df.columns.astype(str).str.contains("^Unnamed", case=False, na=False)
   ]
   df = df.dropna(how="all", axis=1)
   df = df.dropna(how="all")
-
   return df
 
 
-# Cargar datos desde el repositorio de forma automática
 try:
-  df = cargar_y_limpiar_datos("SGTO X CANAL.xlsx")
+  # Cargar datos de forma automática desde el repositorio
+  df = cargar_datos("SGTO X CANAL.xlsx")
 
-  # --- MÉTRICAS SUPERIORES (KPIs) ---
+  # --- TARJETAS DE MÉTRICAS (KPIs) ---
   col1, col2, col3 = st.columns(3)
 
   total_registros = len(df)
-  # Intentar sumar la columna de reserva/venta si existe
   col_reserva = [c for c in df.columns if "RESERVA" in str(c).upper()]
 
   with col1:
@@ -58,39 +50,23 @@ try:
 
   with col3:
     if col_reserva:
-      total_venta = df[col_reserva[0]].sum()
+      # Limpiar y sumar numéricamente
+      total_venta = pd.to_numeric(df[col_reserva[0]], errors="coerce").sum()
       st.metric(
           label="💰 Valor Total Acumulado", value=f"${total_venta:,.2f}"
       )
     else:
-      st.metric(label="estado del Canal", value="Activo")
+      st.metric(label="Estado del Sistema", value="Activo")
 
   st.markdown("---")
 
-  # --- FILTROS Y BUSCADOR ---
-  st.subheader("🔍 Filtros de Consulta")
-  col_filtro1, col_filtro2 = st.columns(2)
-
-  busqueda = col_filtro1.text_input(
-      "Buscar cliente o valor específico:", ""
-  )
-
-  if busqueda:
-    # Filtrar el DataFrame si escriben algo
-    df_filtrado = df[
-        df.astype(str)
-        .apply(lambda x: x.str.contains(busqueda, case=False))
-        .any(axis=1)
-    ]
-  else:
-    df_filtrado = df
-
   # --- VISUALIZACIÓN DE LA TABLA ---
   st.subheader("📋 Detalle de Oportunidades")
-  st.dataframe(df_filtrado, use_container_width=True)
+  st.dataframe(df, use_container_width=True)
 
 except Exception as e:
-  st.error(
-      "No se pudo cargar el archivo 'SGTO X CANAL.xlsx' automáticamente. Por"
-      f" favor verifica que esté en el repositorio. Detalle: {e}"
+  st.error(f"No se pudo cargar el archivo automáticamente. Detalle: {e}")
+  st.info(
+      "Verifica que el archivo 'SGTO X CANAL.xlsx' esté en la misma carpeta"
+      " principal de GitHub."
   )

@@ -43,15 +43,23 @@ st.markdown("""
 st.title("🎯 Control de Oportunidades y Cumplimiento (Meta 70%)")
 st.markdown(
     "Monitoreo interactivo de canales, ejecución de impactos, ventas y reserva"
-    " actualizada."
+    " actualizada (Conectado a SharePoint)."
 )
 st.markdown("---")
 
 
-# Carga de datos optimizada con caché
-@st.cache_data
+# Carga de datos directamente desde SharePoint con caché de 60 segundos
+@st.cache_data(ttl=60)
 def cargar_datos():
-  return pd.read_excel("SGTO X CANAL.xlsx", sheet_name="Export")
+  enlace_sharepoint = "https://colcomerciocom.sharepoint.com/:x:/r/sites/SEGUIMIENTOPERNOD/Documentos%20compartidos/PERNOD/SGTO%20PERNOD%20NACIONAL/SGTO%20X%20CANAL.xlsx?d=wa3d3c11cd74e44a3ad775705f8bfddd1&csf=1&web=1&e=fMyg1P"
+
+  # Transformación del enlace de SharePoint para descarga directa en Pandas
+  if ":x:/r/" in enlace_sharepoint:
+    enlace_sharepoint = enlace_sharepoint.replace(":x:/r/", ":x:/s/")
+  if "download=1" not in enlace_sharepoint:
+    enlace_sharepoint += "&download=1"
+
+  return pd.read_excel(enlace_sharepoint, sheet_name="Export")
 
 
 try:
@@ -151,14 +159,13 @@ try:
       (impactados_count / total_clientes * 100) if total_clientes > 0 else 0
   )
 
-  # Totales completos en pesos (redondeados a enteros para mayor limpieza)
   total_ventas = df_filtrado["TOTAL"].sum()
   total_reserva_dia = df_filtrado["RESERVA DIA"].sum()
 
   str_ventas = f"${total_ventas:,.0f}"
   str_reserva = f"${total_reserva_dia:,.0f}"
 
-  # --- TARJETAS SUPERIORES CON HTML PERSONALIZADO ---
+  # --- TARJETAS SUPERIORES CON VALORES COMPLETOS ---
   col1, col2, col3, col4, col5 = st.columns(5)
 
   with col1:
@@ -282,4 +289,7 @@ try:
     )
 
 except Exception as e:
-  st.error(f"Ocurrió un error al procesar los datos: {e}")
+  st.error(
+      f"Ocurrió un error al cargar los datos desde SharePoint: {e}. "
+      "Verifica que el archivo tenga la pestaña 'Export'."
+  )

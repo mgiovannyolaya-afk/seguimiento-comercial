@@ -197,7 +197,7 @@ try:
           label="Clientes Pendientes en este filtro", value=f"{len(df_opp):,}"
       )
       st.dataframe(
-          df_opp[cols_disponibles], use_container_width=ToolTip := True, height=450
+          df_opp[cols_disponibles], use_container_width=True, height=450
       )
     else:
       st.info("No se encontró la columna IMPACTO.")

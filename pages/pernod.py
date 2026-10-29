@@ -37,7 +37,7 @@ try:
     col_mes = detectar_columna(['Mes', 'Month'], 5)
     col_valor = detectar_columna(['Ventas Det', 'Venta', 'Valor', 'Total'], 6)
 
-    # --- BARRA LATERAL: FILTROS CON OPCIÓN "TODOS" ---
+    # --- BARRA LATERAL: FILTROS Y BUSCADOR DE CLIENTE ---
     st.sidebar.header("🎯 Filtros")
 
     df_f = df.copy()
@@ -59,6 +59,13 @@ try:
     sel_gerente = st.sidebar.selectbox("Supervisor", opciones_gerente, index=0)
     if sel_gerente != "Todos":
         df_f = df_f[df_f[col_gerente].astype(str) == sel_gerente]
+
+    st.sidebar.divider()
+    
+    # 4. Buscador por nombre de cliente
+    busqueda_cliente = st.sidebar.text_input("🔍 Buscar Cliente por Nombre", "")
+    if busqueda_cliente:
+        df_f = df_f[df_f[col_cliente].astype(str).str.contains(busqueda_cliente, case=False, na=False)]
 
     # Asegurar tipos de datos numéricos
     df_f[col_valor] = pd.to_numeric(df_f[col_valor], errors='coerce').fillna(0)
@@ -93,20 +100,20 @@ try:
         df_actual = df_f[(df_f[col_anio] == anio_sel) & (df_f[col_mes].isin(meses_sel))]
         df_ant = df_f[(df_f[col_anio] == anio_anterior) & (df_f[col_mes].isin(meses_sel))]
 
-        # Cálculos generales para KPIs
+        # Cálculos generales para KPIs (sin decimales en el crecimiento)
         total_actual = df_actual[col_valor].sum()
         total_anterior = df_ant[col_valor].sum()
         crecimiento_global = ((total_actual / total_anterior) - 1) * 100 if total_anterior > 0 else 0
 
-        # Tarjetas de Métricas principales
+        # Tarjetas de Métricas principales (sin decimales)
         kpi1, kpi2, kpi3 = st.columns(3)
         kpi1.metric(label=f"Ventas Total ({anio_sel})", value=f"${total_actual:,.0f}")
-        kpi2.metric(label=f"Ventas Total ({anio_anterior})", value=f"${total_anterior:,.0f}", delta=f"{crecimiento_global:,.2f}% YoY")
+        kpi2.metric(label=f"Ventas Total ({anio_anterior})", value=f"${total_anterior:,.0f}", delta=f"{crecimiento_global:,.0f}% YoY")
         kpi3.metric(label="Meses Evaluados", value=f"{len(meses_sel)} mes(es)")
 
         st.markdown("---")
 
-        # --- GRÁFICOS INTERACTIVOS CON VALORES EN PESOS ---
+        # --- GRÁFICOS INTERACTIVOS CON VALORES EN PESOS SIN DECIMALES ---
         col_g1, col_g2 = st.columns(2)
 
         with col_g1:
@@ -128,7 +135,7 @@ try:
                 st.info("Sin datos para los filtros seleccionados.")
 
         with col_g2:
-            st.subheader("🏆 Top 10 Clientes")
+            st.subheader("🏆 Top Clientes (Filtrados)")
             if not df_actual.empty:
                 df_cli_top = df_actual.groupby(col_cliente)[col_valor].sum().reset_index()
                 df_cli_top = df_cli_top.sort_values(by=col_valor, ascending=False).head(10)
@@ -147,12 +154,13 @@ try:
 
         st.markdown("---")
 
-        # --- TABLA COMPARATIVA DE CLIENTES (YoY) ---
+        # --- TABLA COMPARATIVA DE CLIENTES (YoY SIN DECIMALES) ---
         st.subheader("📋 Detalle por Cliente (Año Actual vs. Año Anterior)")
 
         ventas_actual = df_actual.groupby(col_cliente)[col_valor].sum().reset_index()
         ventas_actual.rename(columns={col_valor: f'Venta {anio_sel}'}, inplace=True)
 
+        ventas_anterior = df_ant.groupby(col_cliente)[col_valor].sum().reset_info() if hasattr(df_ant.groupby(col_cliente)[col_valor].sum().reset_index(), 'rename') else df_ant.groupby(col_cliente)[col_valor].sum().reset_index()
         ventas_anterior = df_ant.groupby(col_cliente)[col_valor].sum().reset_index()
         ventas_anterior.rename(columns={col_valor: f'Venta {anio_anterior}'}, inplace=True)
 
@@ -163,11 +171,11 @@ try:
         
         tabla_final = tabla_final.sort_values(by=f'Venta {anio_sel}', ascending=False)
 
-        # Formatos finales en moneda
+        # Formatos finales en moneda y porcentajes sin decimales
         for col_m in [f'Venta {anio_sel}', f'Venta {anio_anterior}', 'Variación ($)']:
             tabla_final[col_m] = tabla_final[col_m].apply(lambda x: f"${x:,.0f}")
 
-        tabla_final['Variación (%)'] = tabla_final['Variación (%)'].apply(lambda x: f"{x:,.2f}%")
+        tabla_final['Variación (%)'] = tabla_final['Variación (%)'].apply(lambda x: f"{x:,.0f}%")
 
         st.caption(f"Comparativa activa para: **{', '.join(map(str, meses_sel))}** ({anio_sel} vs. {anio_anterior})")
         st.dataframe(tabla_final, use_container_width=True)

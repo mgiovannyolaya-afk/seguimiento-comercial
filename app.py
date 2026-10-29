@@ -13,7 +13,7 @@ st.markdown("""
         .main { background-color: #f8f9fa; }
         .metric-card {
             background-color: #ffffff;
-            padding: 20px;
+            padding: 15px;
             border-radius: 10px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             text-align: center;
@@ -30,19 +30,19 @@ st.markdown("""
             margin-bottom: 15px;
         }
         .metric-title {
-            font-size: 14px;
+            font-size: 13px;
             color: #6c757d;
             font-weight: 600;
             margin-bottom: 5px;
         }
         .metric-value {
-            font-size: 20px;
+            font-size: 18px;
             color: #212529;
             font-weight: 700;
             white-space: nowrap;
         }
         .metric-delta {
-            font-size: 12px;
+            font-size: 11px;
             color: #28a745;
             margin-top: 5px;
         }
@@ -75,7 +75,7 @@ try:
     if col in df.columns:
       df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-  # Buscar columnas de presupuesto y la columna de % Eje Mes
+  # Buscar columnas de presupuesto y asegurar que tomamos estrictamente % Eje Mes (ignorando decrecimiento)
   col_ppto = next(
       (
           c
@@ -90,14 +90,20 @@ try:
       (
           c
           for c in df.columns
-          if ("eje" in c.lower() and "mes" in c.lower())
-          or ("%" in c and "mes" in c.lower())
+          if "eje" in c.lower()
+          and "mes" in c.lower()
+          and "decre" not in c.lower()
       ),
       None,
   )
-  if not col_eje_mes:  # Respaldo por si se llama diferente
+  if not col_eje_mes:
     col_eje_mes = next(
-        (c for c in df.columns if "%" in c or "cumplimiento" in c.lower()), None
+        (
+            c
+            for c in df.columns
+            if "%" in c and "mes" in c.lower() and "decre" not in c.lower()
+        ),
+        None,
     )
 
   if col_ppto:
@@ -211,12 +217,17 @@ try:
       if "RESERVA DIA" in df_filtrado.columns
       else 0
   )
+  total_ppto_gen = (
+      df_filtrado[col_ppto].sum() if col_ppto and col_ppto in df_filtrado.columns else 0
+  )
+  falta_cumplir = max(0, total_ppto_gen - total_ventas)
 
   str_ventas = f"${total_ventas:,.0f}"
   str_reserva = f"${total_reserva_dia:,.0f}"
+  str_falta = f"${falta_cumplir:,.0f}"
 
-  # --- TARJETAS SUPERIORES ---
-  col1, col2, col3, col4, col5 = st.columns(5)
+  # --- TARJETAS SUPERIORES (6 columnas) ---
+  col1, col2, col3, col4, col5, col6 = st.columns(6)
 
   with col1:
     st.markdown(
@@ -233,9 +244,9 @@ try:
     st.markdown(
         f"""
             <div class="metric-card">
-                <div class="metric-title">✅ Clientes Impactados</div>
+                <div class="metric-title">✅ Impactados</div>
                 <div class="metric-value">{impactados_count:,}</div>
-                <div class="metric-delta">{porcentaje_ejecucion:.1f}% Ejecución</div>
+                <div class="metric-delta">{porcentaje_ejecucion:.1f}% Ejec.</div>
             </div>
         """,
         unsafe_allow_html=True,
@@ -256,7 +267,7 @@ try:
     st.markdown(
         f"""
             <div class="metric-card">
-                <div class="metric-title">💰 Venta Total ($)</div>
+                <div class="metric-title">💰 Venta Total</div>
                 <div class="metric-value">{str_ventas}</div>
             </div>
         """,
@@ -267,8 +278,19 @@ try:
     st.markdown(
         f"""
             <div class="metric-card">
-                <div class="metric-title">🔥 Reserva Día ($)</div>
+                <div class="metric-title">🔥 Reserva Día</div>
                 <div class="metric-value">{str_reserva}</div>
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+  with col6:
+    st.markdown(
+        f"""
+            <div class="metric-card">
+                <div class="metric-title">🎯 Falta para Cumplir</div>
+                <div class="metric-value" style="color: #d9534f;">{str_falta}</div>
             </div>
         """,
         unsafe_allow_html=True,
@@ -289,7 +311,7 @@ try:
       "📋 Detalle Comercial General",
   ])
 
-  # Columnas seleccionadas para la TABLA (SIN incluir col_un para que no se muestre)
+  # Columnas seleccionadas para la TABLA (Incluyendo % Eje Mes y quitando decremento)
   columnas_tabla = [
       "Canal",
       "Zona",

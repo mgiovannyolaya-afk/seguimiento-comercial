@@ -19,6 +19,16 @@ st.markdown("""
             text-align: center;
             border: 1px solid #e9ecef;
         }
+        .summary-box {
+            background-color: #e8f4fd;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #b6d4fe;
+            text-align: center;
+            font-weight: 600;
+            color: #084298;
+            margin-bottom: 15px;
+        }
         .metric-title {
             font-size: 14px;
             color: #6c757d;
@@ -65,7 +75,7 @@ try:
     if col in df.columns:
       df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-  # Buscar columnas de presupuesto y porcentaje de ejecución con nombres flexibles
+  # Buscar columnas de presupuesto y la nueva columna de % Eje Mes
   col_ppto = next(
       (
           c
@@ -76,19 +86,24 @@ try:
       ),
       None,
   )
-  col_eje = next(
+  col_eje_mes = next(
       (
           c
           for c in df.columns
-          if "%" in c or "eje" in c.lower() or "cumplimiento" in c.lower()
+          if ("eje" in c.lower() and "mes" in c.lower())
+          or ("%" in c and "mes" in c.lower())
       ),
       None,
   )
+  if not col_eje_mes:  # Respaldo por si se llama diferente
+    col_eje_mes = next(
+        (c for c in df.columns if "%" in c or "cumplimiento" in c.lower()), None
+    )
 
   if col_ppto:
     df[col_ppto] = pd.to_numeric(df[col_ppto], errors="coerce").fillna(0)
-  if col_eje:
-    df[col_eje] = pd.to_numeric(df[col_eje], errors="coerce").fillna(0)
+  if col_eje_mes:
+    df[col_eje_mes] = pd.to_numeric(df[col_eje_mes], errors="coerce").fillna(0)
 
   # --- BARRA LATERAL DE FILTROS Y GRÁFICO ---
   st.sidebar.header("🔍 Filtros de Segmentación")
@@ -178,7 +193,7 @@ try:
     )
     st.sidebar.plotly_chart(fig, use_container_width=True)
 
-  # --- CÁLCULO DE MÉTRICAS Y TOTALES ---
+  # --- CÁLCULO DE MÉTRICAS Y TOTALES GENERALES ---
   total_clientes = len(df_filtrado)
   impactados_count = (
       int(df_filtrado["IMPACTO"].sum()) if "IMPACTO" in df_filtrado.columns else 0
@@ -274,7 +289,7 @@ try:
       "📋 Detalle Comercial General",
   ])
 
-  # Columnas seleccionadas
+  # Columnas seleccionadas incluyendo la nueva col_eje_mes
   columnas_tabla = [
       col_un,
       "Canal",
@@ -284,7 +299,7 @@ try:
       col_ppto,
       "TOTAL",
       "RESERVA DIA",
-      col_eje,
+      col_eje_mes,
   ]
   cols_disponibles = [
       c
@@ -301,51 +316,70 @@ try:
       df_out[col] = df_out[col].apply(
           lambda x: f"${x:,.0f}" if pd.notnull(x) and x != 0 else "$0"
       )
-    if col_eje and col_eje in df_out.columns:
-      df_out[col_eje] = df_out[col_eje].apply(
+    if col_eje_mes and col_eje_mes in df_out.columns:
+      df_out[col_eje_mes] = df_out[col_eje_mes].apply(
           lambda x: f"{x * 100:.1f}%" if pd.notnull(x) else "0.0%"
       )
     return df_out
+
+
+  # Función para renderizar los totales superiores de la tabla
+  def mostrar_totales_superiores(df_sub):
+    t_ppto = df_sub[col_ppto].sum() if col_ppto and col_ppto in df_sub.columns else 0
+    t_venta = df_sub["TOTAL"].sum() if "TOTAL" in df_sub.columns else 0
+    t_reserva = df_sub["RESERVA DIA"].sum() if "RESERVA DIA" in df_sub.columns else 0
+    
+    # Promedio ponderado o promedio simple de ejecución del mes
+    t_eje = 0
+    if col_eje_mes and col_eje_mes in df_sub.columns and len(df_sub) > 0:
+      t_eje = df_sub[col_eje_mes].mean() * 100
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+      st.markdown(f"<div class='summary-box'>📦 Total Presupuesto<br><b>${t_ppto:,.0f}</b></div>", unsafe_allow_html=True)
+    with c2:
+      st.markdown(f"<div class='summary-box'>💰 Total Venta<br><b>${t_venta:,.0f}</b></div>", unsafe_allow_html=True)
+    with c3:
+      st.markdown(f"<div class='summary-box'>🔥 Total Reserva Día<br><b><b>${t_reserva:,.0f}</b></div>", unsafe_allow_html=True)
+    with c4:
+      st.markdown(f"<div class='summary-box'>📈 Promedio % Eje Mes<br><b>{t_eje:.1f}%</b></div>", unsafe_allow_html=True)
 
 
   with pestana1:
     st.subheader("🔍 Clientes Pendientes por Impactar (Oportunidad)")
     if "IMPACTO" in df_filtrado.columns:
       df_opp = df_filtrado[df_filtrado["IMPACTO"] == 0]
-      st.metric(
-          label="Clientes Pendientes en este filtro", value=f"{len(df_opp):,}"
-      )
+      st.metric(label="Clientes Pendientes en este filtro", value=f"{len(df_opp):,}")
+      mostrar_totales_superiores(df_opp)
       st.dataframe(
           formatear_dataframe(df_opp[cols_disponibles]),
           use_container_width=True,
-          height=450,
+          height=420,
       )
     else:
       st.info("No se encontró la columna IMPACTO.")
 
   with pestana2:
-    st.subheader(
-        "✅ Clientes Impactados Exitosamente (Presupuesto, Venta y Ejecución)"
-    )
+    st.subheader("✅ Clientes Impactados Exitosamente")
     if "IMPACTO" in df_filtrado.columns:
       df_imp = df_filtrado[df_filtrado["IMPACTO"] == 1]
-      st.metric(
-          label="Clientes Impactados en este filtro", value=f"{len(df_imp):,}"
-      )
+      st.metric(label="Clientes Impactados en este filtro", value=f"{len(df_imp):,}")
+      mostrar_totales_superiores(df_imp)
       st.dataframe(
           formatear_dataframe(df_imp[cols_disponibles]),
           use_container_width=True,
-          height=450,
+          height=420,
       )
     else:
       st.info("No se encontró la columna IMPACTO.")
 
   with pestana3:
     st.subheader("📋 Base de Datos General (Filtrada)")
+    mostrar_totales_superiores(df_filtrado)
     st.dataframe(
         formatear_dataframe(df_filtrado[cols_disponibles]),
         use_container_width=True,
-        height=450,
+        height=420,
     )
 
 except Exception as e:

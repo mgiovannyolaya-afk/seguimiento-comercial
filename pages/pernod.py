@@ -100,7 +100,7 @@ try:
         df_actual = df_f[(df_f[col_anio] == anio_sel) & (df_f[col_mes].isin(meses_sel))]
         df_ant = df_f[(df_f[col_anio] == anio_anterior) & (df_f[col_mes].isin(meses_sel))]
 
-        # Cálculos generales para KPIs (sin decimales en el crecimiento)
+        # Cálculos generales para KPIs (sin decimales)
         total_actual = df_actual[col_valor].sum()
         total_anterior = df_ant[col_valor].sum()
         crecimiento_global = ((total_actual / total_anterior) - 1) * 100 if total_anterior > 0 else 0
@@ -113,7 +113,7 @@ try:
 
         st.markdown("---")
 
-        # --- GRÁFICOS INTERACTIVOS CON VALORES EN PESOS SIN DECIMALES ---
+        # --- GRÁFICOS INTERACTIVOS (SIN DECIMALES EN BARRAS Y BARRA DE COLOR) ---
         col_g1, col_g2 = st.columns(2)
 
         with col_g1:
@@ -128,8 +128,18 @@ try:
                     df_reg, x=col_valor, y=col_regional, orientation='h',
                     text='Texto_Moneda', color=col_valor, color_continuous_scale='Blues'
                 )
-                fig_reg.update_traces(texttemplate='%{text}', textposition='auto')
-                fig_reg.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False, xaxis_title="Venta ($)", yaxis_title="Regional")
+                fig_reg.update_traces(
+                    texttemplate='%{text}', 
+                    textposition='auto',
+                    hovertemplate='<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>'
+                )
+                fig_reg.update_layout(
+                    yaxis={'categoryorder':'total ascending'}, 
+                    showlegend=False, 
+                    xaxis_title="Venta ($)", 
+                    yaxis_title="Regional",
+                    coloraxis_colorbar=dict(tickformat=",.0f")
+                )
                 st.plotly_chart(fig_reg, use_container_width=True)
             else:
                 st.info("Sin datos para los filtros seleccionados.")
@@ -146,21 +156,30 @@ try:
                     df_cli_top, x=col_valor, y=col_cliente, orientation='h',
                     text='Texto_Moneda', color=col_valor, color_continuous_scale='Greens'
                 )
-                fig_cli.update_traces(texttemplate='%{text}', textposition='auto')
-                fig_cli.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False, xaxis_title="Venta ($)", yaxis_title="Cliente")
+                fig_cli.update_traces(
+                    texttemplate='%{text}', 
+                    textposition='auto',
+                    hovertemplate='<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>'
+                )
+                fig_cli.update_layout(
+                    yaxis={'categoryorder':'total ascending'}, 
+                    showlegend=False, 
+                    xaxis_title="Venta ($)", 
+                    yaxis_title="Cliente",
+                    coloraxis_colorbar=dict(tickformat=",.0f")
+                )
                 st.plotly_chart(fig_cli, use_container_width=True)
             else:
                 st.info("Sin datos para los filtros seleccionados.")
 
         st.markdown("---")
 
-        # --- TABLA COMPARATIVA DE CLIENTES (YoY SIN DECIMALES) ---
+        # --- TABLA COMPARATIVA DE CLIENTES (SIN DECIMALES) ---
         st.subheader("📋 Detalle por Cliente (Año Actual vs. Año Anterior)")
 
         ventas_actual = df_actual.groupby(col_cliente)[col_valor].sum().reset_index()
         ventas_actual.rename(columns={col_valor: f'Venta {anio_sel}'}, inplace=True)
 
-        ventas_anterior = df_ant.groupby(col_cliente)[col_valor].sum().reset_info() if hasattr(df_ant.groupby(col_cliente)[col_valor].sum().reset_index(), 'rename') else df_ant.groupby(col_cliente)[col_valor].sum().reset_index()
         ventas_anterior = df_ant.groupby(col_cliente)[col_valor].sum().reset_index()
         ventas_anterior.rename(columns={col_valor: f'Venta {anio_anterior}'}, inplace=True)
 

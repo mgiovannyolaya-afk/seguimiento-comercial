@@ -330,7 +330,7 @@ try:
       "📋 Detalle Comercial General",
   ])
 
-  # Columnas seleccionadas para la TABLA ordenadas estrictamente como pediste
+  # Columnas seleccionadas para la TABLA ordenadas estrictamente
   columnas_tabla = [
       "Canal",
       "Zona",
@@ -365,7 +365,7 @@ try:
     return df_out
 
 
-  # Función para renderizar los totales superiores de la tabla (calculado con la suma filtrada)
+  # Función para renderizar los totales superiores de la tabla
   def mostrar_totales_superiores(df_sub):
     t_ppto = (
         df_sub[col_ppto].sum() if col_ppto and col_ppto in df_sub.columns else 0
@@ -375,9 +375,7 @@ try:
         df_sub["RESERVA DIA"].sum() if "RESERVA DIA" in df_sub.columns else 0
     )
 
-    t_eje = (
-        ((t_venta + t_reserva) / t_ppto * 100) if t_ppto > 0 else 0
-    )  # Ponderado real de la vista filtrada
+    t_eje = ((t_venta + t_reserva) / t_ppto * 100) if t_ppto > 0 else 0
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
@@ -406,9 +404,32 @@ try:
     st.subheader("🔍 Clientes Pendientes por Impactar (Oportunidad)")
     if "IMPACTO" in df_filtrado.columns:
       df_opp = df_filtrado[df_filtrado["IMPACTO"] == 0]
-      st.metric(
-          label="Clientes Pendientes en este filtro", value=f"{len(df_opp):,}"
+
+      # Métricas solicitadas lado a lado para la pestaña de Oportunidad
+      tot_opp = len(df_opp)
+      con_reserva_opp = (
+          len(df_opp[df_opp["RESERVA DIA"] > 0])
+          if "RESERVA DIA" in df_opp.columns
+          else 0
       )
+      neto_faltantes = tot_opp - con_reserva_opp
+
+      col_o1, col_o2, col_o3 = st.columns(3)
+      with col_o1:
+        st.metric(
+            label="Clientes Pendientes (Oportunidad)", value=f"{tot_opp:,}"
+        )
+      with col_o2:
+        st.metric(
+            label="Pendientes con Reserva Día > $0",
+            value=f"{con_reserva_opp:,}",
+        )
+      with col_o3:
+        st.metric(
+            label="Total Neto Faltantes", value=f"{neto_faltantes:,}"
+        )
+
+      st.markdown("---")
       mostrar_totales_superiores(df_opp)
       st.dataframe(
           formatear_dataframe(df_opp[cols_disponibles]),

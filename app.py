@@ -7,7 +7,7 @@ st.set_page_config(
     page_title="Gestión Comercial - Meta 70%", page_icon="🎯", layout="wide"
 )
 
-# Estilo visual corporativo y tarjetas personalizadas con no-wrap para evitar saltos de línea
+# Estilo visual corporativo y tarjetas personalizadas con no-wrap
 st.markdown("""
     <style>
         .main { background-color: #f8f9fa; }
@@ -29,7 +29,7 @@ st.markdown("""
             font-size: 20px;
             color: #212529;
             font-weight: 700;
-            white-space: nowrap; /* Evita que el número se parta en varias líneas */
+            white-space: nowrap;
         }
         .metric-delta {
             font-size: 12px;
@@ -48,8 +48,8 @@ st.markdown(
 st.markdown("---")
 
 
-# Carga de datos optimizada con caché
-@st.cache_data
+# Carga de datos local desde el repositorio (actualizado mediante subida manual)
+@st.cache_data(ttl=60)
 def cargar_datos():
   return pd.read_excel("SGTO X CANAL.xlsx", sheet_name="Export")
 
@@ -70,25 +70,33 @@ try:
   # --- BARRA LATERAL DE FILTROS Y GRÁFICO ---
   st.sidebar.header("🔍 Filtros de Segmentación")
 
-  # 1. Filtro de Canal
+  # 1. Filtro de Regional (Nuevo)
+  regional_col = (
+      "Regional" if "Regional" in df.columns else "REGIONAL"
+  )  # Detectar variaciones de mayúsculas
+  if regional_col not in df.columns and "REGIONAL" in df.columns:
+    regional_col = "REGIONAL"
+
+  if regional_col in df.columns:
+    regionales = ["Todas"] + sorted(
+        df[regional_col].dropna().astype(str).unique().tolist()
+    )
+    regional_seleccionada = st.sidebar.selectbox("Regional", regionales)
+    if regional_seleccionada != "Todas":
+      df_temp = df[df[regional_col].astype(str) == regional_seleccionada]
+    else:
+      df_temp = df
+  else:
+    df_temp = df
+
+  # 2. Filtro de Canal
   canales = ["Todos"] + sorted(
-      df["Canal"].dropna().astype(str).unique().tolist()
+      df_temp["Canal"].dropna().astype(str).unique().tolist()
   )
   canal_seleccionado = st.sidebar.selectbox("Canal", canales)
 
   if canal_seleccionado != "Todos":
-    df_temp = df[df["Canal"].astype(str) == canal_seleccionado]
-  else:
-    df_temp = df
-
-  # 2. Filtro de Supervisor
-  supervisores = ["Todos"] + sorted(
-      df_temp["Supervisor"].dropna().astype(str).unique().tolist()
-  )
-  sup_seleccionado = st.sidebar.selectbox("Supervisor", supervisores)
-
-  if sup_seleccionado != "Todos":
-    df_temp = df_temp[df_temp["Supervisor"].astype(str) == sup_seleccionado]
+    df_temp = df_temp[df_temp["Canal"].astype(str) == canal_seleccionado]
 
   # 3. Filtro de Zona
   zonas = ["Todas"] + sorted(
@@ -97,22 +105,11 @@ try:
   zona_seleccionada = st.sidebar.selectbox("Zona", zonas)
 
   if zona_seleccionada != "Todas":
-    df_temp = df_temp[df_temp["Zona"].astype(str) == zona_seleccionada]
-
-  # 4. Filtro de Vendedor
-  vendedores = ["Todos"] + sorted(
-      df_temp["Vendedor"].dropna().astype(str).unique().tolist()
-  )
-  vendedor_seleccionado = st.sidebar.selectbox("Vendedor", vendedores)
-
-  if vendedor_seleccionado != "Todos":
-    df_filtrado = df_temp[
-        df_temp["Vendedor"].astype(str) == vendedor_seleccionado
-    ]
+    df_filtrado = df_temp[df_temp["Zona"].astype(str) == zona_seleccionada]
   else:
     df_filtrado = df_temp
 
-  # --- GRÁFICO PEQUEÑO EN LA BARRA LATERAL (Debajo de los filtros) ---
+  # --- GRÁFICO PEQUEÑO EN LA BARRA LATERAL ---
   st.sidebar.markdown("---")
   st.sidebar.subheader("📊 Resumen Visual")
   if not df_filtrado.empty:
@@ -151,14 +148,13 @@ try:
       (impactados_count / total_clientes * 100) if total_clientes > 0 else 0
   )
 
-  # Totales completos en pesos (redondeados a enteros para mayor limpieza)
   total_ventas = df_filtrado["TOTAL"].sum()
   total_reserva_dia = df_filtrado["RESERVA DIA"].sum()
 
   str_ventas = f"${total_ventas:,.0f}"
   str_reserva = f"${total_reserva_dia:,.0f}"
 
-  # --- TARJETAS SUPERIORES CON HTML PERSONALIZADO ---
+  # --- TARJETAS SUPERIORES ---
   col1, col2, col3, col4, col5 = st.columns(5)
 
   with col1:
@@ -217,7 +213,7 @@ try:
         unsafe_allow_html=True,
     )
 
-  # Barra de progreso visual para el porcentaje de ejecución
+  # Barra de progreso visual
   st.markdown("<br>", unsafe_allow_html=True)
   st.progress(
       min(max(porcentaje_ejecucion / 100.0, 0.0), 1.0),
@@ -232,11 +228,11 @@ try:
       "📋 Detalle Comercial General",
   ])
 
+  # Columnas principales sin Supervisor ni Vendedor
   columnas_principales = [
+      "Regional",
       "Canal",
-      "Supervisor",
       "Zona",
-      "Vendedor",
       "Nit Cliente",
       "Nombre Cliente",
       "Ciudad",
@@ -248,6 +244,12 @@ try:
   cols_disponibles = [
       c for c in columnas_principales if c in df_filtrado.columns
   ]
+  if not cols_disponibles:
+    cols_disponibles = [
+        c
+        for c in df_filtrado.columns
+        if c not in ["Supervisor", "Vendedor"]
+    ]
 
   with pestana1:
     st.subheader("🔍 Clientes Pendientes por Impactar (Oportunidad)")
@@ -282,4 +284,7 @@ try:
     )
 
 except Exception as e:
-  st.error(f"Ocurrió un error al procesar los datos: {e}")
+  st.error(
+      f"Ocurrió un error al cargar los datos: {e}. Verifica que el archivo"
+      " tenga la pestaña 'Export'."
+  )

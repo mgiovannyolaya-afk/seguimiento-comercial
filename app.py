@@ -43,10 +43,10 @@ try:
         0
     )
 
-  # --- BARRA LATERAL DE FILTROS INTERACTIVOS ---
+  # --- BARRA LATERAL DE FILTROS Y GRÁFICO ---
   st.sidebar.header("🔍 Filtros de Segmentación")
 
-  # 1. Filtro de Canal (Muestra todos los canales)
+  # 1. Filtro de Canal
   canales = ["Todos"] + sorted(
       df["Canal"].dropna().astype(str).unique().tolist()
   )
@@ -87,6 +87,35 @@ try:
     ]
   else:
     df_filtrado = df_temp
+
+  # --- GRÁFICO PEQUEÑO EN LA BARRA LATERAL (Debajo de los filtros) ---
+  st.sidebar.markdown("---")
+  st.sidebar.subheader("📊 Resumen Visual")
+  if not df_filtrado.empty:
+    df_grafico = (
+        df_filtrado.groupby("Canal")[["TOTAL", "RESERVA DIA"]]
+        .sum()
+        .reset_index()
+    )
+    fig = px.bar(
+        df_grafico,
+        x="Canal",
+        y=["TOTAL", "RESERVA DIA"],
+        labels={"value": "Pesos ($)", "variable": "Métrica"},
+        barmode="group",
+        height=260,
+        color_discrete_sequence=["#1f77b4", "#ff7f0e"],
+    )
+    fig.update_layout(
+        margin=dict(l=10, r=10, t=10, b=10),
+        xaxis_tickangle=-45,
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
+        ),
+    )
+    st.sidebar.plotly_chart(fig, use_container_width=True)
 
   # --- CÁLCULO DE MÉTRICAS Y TOTALES ---
   total_clientes = len(df_filtrado)
@@ -131,33 +160,6 @@ try:
   )
   st.markdown("---")
 
-  # --- GRÁFICO PEQUEÑO Y COMPACTO DE RESUMEN ---
-  if not df_filtrado.empty:
-    with st.expander("📊 Ver Gráfico Resumen por Canal", expanded=True):
-      df_grafico = (
-          df_filtrado.groupby("Canal")[["TOTAL", "RESERVA DIA"]]
-          .sum()
-          .reset_index()
-      )
-      fig = px.bar(
-          df_grafico,
-          x="Canal",
-          y=["TOTAL", "RESERVA DIA"],
-          labels={"value": "Pesos ($)", "variable": "Métrica"},
-          barmode="group",
-          height=300,
-          color_discrete_sequence=["#1f77b4", "#ff7f0e"],
-      )
-      fig.update_layout(
-          margin=dict(l=20, r=20, t=20, b=20),
-          xaxis_tickangle=-25,
-          plot_bgcolor="rgba(0,0,0,0)",
-          paper_bgcolor="rgba(0,0,0,0)",
-      )
-      st.plotly_chart(fig, use_container_width=True)
-
-  st.markdown("---")
-
   # --- PESTAÑAS DE NAVEGACIÓN PRINCIPALES ---
   pestana1, pestana2, pestana3 = st.tabs([
       "🎯 Clientes con Oportunidad (Falta Impactar)",
@@ -191,7 +193,7 @@ try:
           label="Clientes Pendientes en este filtro", value=f"{len(df_opp):,}"
       )
       st.dataframe(
-          df_opp[cols_disponibles], use_container_width=True, height=420
+          df_opp[cols_disponibles], use_container_width=True, height=450
       )
     else:
       st.info("No se encontró la columna IMPACTO.")
@@ -204,7 +206,7 @@ try:
           label="Clientes Impactados en este filtro", value=f"{len(df_imp):,}"
       )
       st.dataframe(
-          df_imp[cols_disponibles], use_container_width=True, height=420
+          df_imp[cols_disponibles], use_container_width=True, height=450
       )
     else:
       st.info("No se encontró la columna IMPACTO.")
@@ -212,7 +214,7 @@ try:
   with pestana3:
     st.subheader("📋 Base de Datos General (Filtrada)")
     st.dataframe(
-        df_filtrado[cols_disponibles], use_container_width=True, height=420
+        df_filtrado[cols_disponibles], use_container_width=True, height=450
     )
 
 except Exception as e:

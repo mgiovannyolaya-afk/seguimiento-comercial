@@ -28,8 +28,8 @@ try:
                     return col
         return columnas[fallback_idx] if fallback_idx < len(columnas) else columnas[0]
 
-    # Asignación automática de columnas
-    col_canal = detectar_columna(['Canal', 'Canal de Venta'], 0)
+    # Asignación automática priorizando "Tipo de Cliente" para el canal
+    col_canal = detectar_columna(['Tipo de Cliente', 'Tipo cliente', 'Canal', 'Canal de Venta'], 0)
     col_regional = detectar_columna(['Regional', 'Región', 'Reg', 'Código UN', 'Cod UN'], 1)
     col_gerente = detectar_columna(['Gerente Zona', 'Gerente Unidad', 'Gerente'], 2)
     col_cliente = detectar_columna(['Nombre Cliente', 'Cliente', 'Documento Cliente'], 3)
@@ -37,7 +37,7 @@ try:
     col_mes = detectar_columna(['Mes', 'Month'], 5)
     col_valor = detectar_columna(['Ventas Det', 'Venta', 'Valor', 'Total'], 6)
 
-    # --- BARRA LATERAL: ORDEN EXACTO SOLICITADO ---
+    # --- BARRA LATERAL: ORDEN EXACTO (Regional -> Gerente -> Tipo de Cliente) ---
     st.sidebar.header("🎯 Filtros Interactivos")
 
     df_f = df.copy()
@@ -54,9 +54,9 @@ try:
     if gerente_sel:
         df_f = df_f[df_f[col_gerente].astype(str).isin(gerente_sel)]
 
-    # 3. Tercero: Canal (Mayoristas, licoreras, etc.)
+    # 3. Tercero: Tipo de Cliente / Canal
     canales_disp = sorted(df_f[col_canal].dropna().unique().astype(str))
-    canales_sel = st.sidebar.multiselect("Canal:", canales_disp, default=canales_disp)
+    canales_sel = st.sidebar.multiselect("Tipo de Cliente:", canales_disp, default=canales_disp)
     if canales_sel:
         df_f = df_f[df_f[col_canal].astype(str).isin(canales_sel)]
 

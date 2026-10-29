@@ -37,17 +37,9 @@ try:
     col_mes = detectar_columna(['Mes', 'Month'], 5)
     col_valor = detectar_columna(['Ventas Det', 'Venta', 'Valor', 'Total'], 6)
 
-    # Asegurar tipo numérico limpio en la columna de valor global desde el inicio
+    # Asegurar tipo numérico limpio en la columna de valor global
     df[col_valor] = pd.to_numeric(df[col_valor], errors='coerce').fillna(0)
     df[col_anio] = pd.to_numeric(df[col_anio], errors='coerce')
-
-    # --- PANEL DE DEPUGUARCIÓN RÁPIDA (Para verificar que cuadre con Excel) ---
-    with st.expander("🛠️ Verificación de Datos y Diagnóstico (Comparar con Excel)", expanded=False):
-        st.write(f"**Columna de Venta Detectada:** `{col_valor}`")
-        st.write(f"**Columna de Mes Detectada:** `{col_mes}` | Valores únicos en Excel: `{df[col_mes].dropna().unique().tolist()}`")
-        total_absoluto_excel = df[col_valor].sum()
-        st.metric("Suma Total Bruta de Todo el Archivo Excel", f"${total_absoluto_excel:,.0f}")
-        st.caption("Si este total bruto no coincide con tu archivo de Excel completo, significa que la columna de valor detectada no es la correcta.")
 
     # --- BARRA LATERAL: FILTROS ---
     st.sidebar.header("🎯 Filtros")
@@ -89,8 +81,21 @@ try:
         anio_base = st.selectbox("Selecciona el Año Base:", anios_disp, index=len(anios_disp)-1 if anios_disp else 0)
 
     with col_f2:
-        # Extraer los meses tal como vienen en el DataFrame original para evitar desajustes
-        meses_disp = sorted(df_f[col_mes].dropna().unique(), key=lambda x: str(x))
+        # Orden cronológico estricto para los meses (admite abreviaturas y nombres completos)
+        meses_unicos = df_f[col_mes].dropna().unique()
+        orden_meses_ref = [
+            "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
+            "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+        ]
+        
+        def obtener_peso_mes(m):
+            m_lower = str(m).strip().lower()
+            for idx, ref in enumerate(orden_meses_ref):
+                if ref in m_lower:
+                    return idx
+            return 999
+
+        meses_disp = sorted(list(meses_unicos), key=obtener_peso_mes)
 
         if hasattr(st, "segmented_control"):
             meses_sel = st.segmented_control("Selecciona los meses activos:", options=meses_disp, default=meses_disp, selection_mode="multi")

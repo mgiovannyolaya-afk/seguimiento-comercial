@@ -16,7 +16,7 @@ try:
     df = cargar_datos()
     columnas = df.columns.tolist()
 
-    # Función automática inteligente para encontrar las columnas exactas sin necesidad de manuales
+    # Función automática inteligente para encontrar las columnas exactas
     def detectar_columna(palabras_clave, fallback_idx=0):
         for pk in palabras_clave:
             for col in columnas:
@@ -28,37 +28,37 @@ try:
                     return col
         return columnas[fallback_idx] if fallback_idx < len(columnas) else columnas[0]
 
-    # Asignación automática de columnas tras bambalinas
+    # Asignación automática de columnas
     col_canal = detectar_columna(['Canal', 'Canal de Venta'], 0)
-    col_regional = detectar_columna(['Regional', 'Zona', 'Código Zona'], 1)
+    col_regional = detectar_columna(['Regional', 'Región', 'Reg', 'Código UN', 'Cod UN'], 1)
     col_gerente = detectar_columna(['Gerente Zona', 'Gerente Unidad', 'Gerente'], 2)
     col_cliente = detectar_columna(['Nombre Cliente', 'Cliente', 'Documento Cliente'], 3)
     col_anio = detectar_columna(['Año', 'Anio', 'Year'], 4)
     col_mes = detectar_columna(['Mes', 'Month'], 5)
     col_valor = detectar_columna(['Ventas Det', 'Venta', 'Valor', 'Total'], 6)
 
-    # --- BARRA LATERAL: SOLO FILTROS LIMPIOS ---
+    # --- BARRA LATERAL: ORDEN EXACTO SOLICITADO ---
     st.sidebar.header("🎯 Filtros Interactivos")
 
     df_f = df.copy()
 
-    # 1. Filtro Canal
+    # 1. Primero: Regional (DIBOG, DICAL, etc.)
+    regional_disp = sorted(df_f[col_regional].dropna().unique().astype(str))
+    regional_sel = st.sidebar.multiselect("Regional:", regional_disp, default=regional_disp)
+    if regional_sel:
+        df_f = df_f[df_f[col_regional].astype(str).isin(regional_sel)]
+
+    # 2. Segundo: Gerente de Unidad (GU)
+    gerente_disp = sorted(df_f[col_gerente].dropna().unique().astype(str))
+    gerente_sel = st.sidebar.multiselect("Gerente de Unidad (GU):", gerente_disp, default=gerente_disp)
+    if gerente_sel:
+        df_f = df_f[df_f[col_gerente].astype(str).isin(gerente_sel)]
+
+    # 3. Tercero: Canal (Mayoristas, licoreras, etc.)
     canales_disp = sorted(df_f[col_canal].dropna().unique().astype(str))
     canales_sel = st.sidebar.multiselect("Canal:", canales_disp, default=canales_disp)
     if canales_sel:
         df_f = df_f[df_f[col_canal].astype(str).isin(canales_sel)]
-
-    # 2. Filtro Regional
-    regional_disp = sorted(df_f[col_regional].dropna().unique().astype(str))
-    regional_sel = st.sidebar.multiselect("Regional / Zona:", regional_disp, default=regional_disp)
-    if regional_sel:
-        df_f = df_f[df_f[col_regional].astype(str).isin(regional_sel)]
-
-    # 3. Filtro Gerente de Unidad
-    gerente_disp = sorted(df_f[col_gerente].dropna().unique().astype(str))
-    gerente_sel = st.sidebar.multiselect("Gerente de Unidad:", gerente_disp, default=gerente_disp)
-    if gerente_sel:
-        df_f = df_f[df_f[col_gerente].astype(str).isin(gerente_sel)]
 
     # Asegurar tipos de datos numéricos
     df_f[col_valor] = pd.to_numeric(df_f[col_valor], errors='coerce').fillna(0)

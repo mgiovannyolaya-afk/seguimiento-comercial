@@ -18,8 +18,8 @@ st.markdown("""
 # Título principal del tablero
 st.title("🎯 Control de Oportunidades y Cumplimiento (Meta 70%)")
 st.markdown(
-    "Monitoreo interactivo de canales, ejecución de impactos, ventas en pesos y"
-    " reserva actualizada."
+    "Monitoreo interactivo de canales, ejecución de impactos, ventas y reserva"
+    " actualizada."
 )
 st.markdown("---")
 
@@ -46,7 +46,7 @@ try:
   # --- BARRA LATERAL DE FILTROS INTERACTIVOS ---
   st.sidebar.header("🔍 Filtros de Segmentación")
 
-  # 1. Filtro de Canal
+  # 1. Filtro de Canal (Muestra todos los canales)
   canales = ["Todos"] + sorted(
       df["Canal"].dropna().astype(str).unique().tolist()
   )
@@ -131,45 +131,39 @@ try:
   )
   st.markdown("---")
 
-  # --- PESTAÑAS DE NAVEGACIÓN Y GRÁFICOS ---
-  pestana1, pestana2, pestana3, pestana4 = st.tabs([
-      "📈 Gráficos Interactivos",
-      "🎯 Clientes con Oportunidad (Falta Impactar)",
-      "✅ Clientes Impactados (Con Ventas)",
-      "📋 Detalle Comercial General",
-  ])
-
-  with pestana1:
-    st.subheader(
-        "📊 Análisis Visual de Ventas y Reservas del Día por Canal"
-    )
-
-    if not df_filtrado.empty:
-      # Agrupar por canal para el gráfico
+  # --- GRÁFICO PEQUEÑO Y COMPACTO DE RESUMEN ---
+  if not df_filtrado.empty:
+    with st.expander("📊 Ver Gráfico Resumen por Canal", expanded=True):
       df_grafico = (
           df_filtrado.groupby("Canal")[["TOTAL", "RESERVA DIA"]]
           .sum()
           .reset_index()
       )
-
-      # Gráfico de barras interactivo con Plotly
       fig = px.bar(
           df_grafico,
           x="Canal",
           y=["TOTAL", "RESERVA DIA"],
-          title="Venta Total vs Reserva del Día por Canal",
-          labels={"value": "Valor en Pesos ($)", "variable": "Métrica"},
+          labels={"value": "Pesos ($)", "variable": "Métrica"},
           barmode="group",
+          height=300,
           color_discrete_sequence=["#1f77b4", "#ff7f0e"],
       )
       fig.update_layout(
-          xaxis_tickangle=-45,
+          margin=dict(l=20, r=20, t=20, b=20),
+          xaxis_tickangle=-25,
           plot_bgcolor="rgba(0,0,0,0)",
           paper_bgcolor="rgba(0,0,0,0)",
       )
       st.plotly_chart(fig, use_container_width=True)
-    else:
-      st.info("No hay datos suficientes para mostrar el gráfico.")
+
+  st.markdown("---")
+
+  # --- PESTAÑAS DE NAVEGACIÓN PRINCIPALES ---
+  pestana1, pestana2, pestana3 = st.tabs([
+      "🎯 Clientes con Oportunidad (Falta Impactar)",
+      "✅ Clientes Impactados (Con Ventas)",
+      "📋 Detalle Comercial General",
+  ])
 
   # Columnas clave para mostrar ordenadas
   columnas_principales = [
@@ -189,7 +183,7 @@ try:
       c for c in columnas_principales if c in df_filtrado.columns
   ]
 
-  with pestana2:
+  with pestana1:
     st.subheader("🔍 Clientes Pendientes por Impactar (Oportunidad)")
     if "IMPACTO" in df_filtrado.columns:
       df_opp = df_filtrado[df_filtrado["IMPACTO"] == 0]
@@ -197,12 +191,12 @@ try:
           label="Clientes Pendientes en este filtro", value=f"{len(df_opp):,}"
       )
       st.dataframe(
-          df_opp[cols_disponibles], use_container_width=True, height=450
+          df_opp[cols_disponibles], use_container_width=True, height=420
       )
     else:
       st.info("No se encontró la columna IMPACTO.")
 
-  with pestana3:
+  with pestana2:
     st.subheader("✅ Clientes Impactados Exitosamente")
     if "IMPACTO" in df_filtrado.columns:
       df_imp = df_filtrado[df_filtrado["IMPACTO"] == 1]
@@ -210,15 +204,15 @@ try:
           label="Clientes Impactados en este filtro", value=f"{len(df_imp):,}"
       )
       st.dataframe(
-          df_imp[cols_disponibles], use_container_width=True, height=450
+          df_imp[cols_disponibles], use_container_width=True, height=420
       )
     else:
       st.info("No se encontró la columna IMPACTO.")
 
-  with pestana4:
+  with pestana3:
     st.subheader("📋 Base de Datos General (Filtrada)")
     st.dataframe(
-        df_filtrado[cols_disponibles], use_container_width=True, height=450
+        df_filtrado[cols_disponibles], use_container_width=True, height=420
     )
 
 except Exception as e:

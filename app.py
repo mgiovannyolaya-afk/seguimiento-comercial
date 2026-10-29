@@ -239,7 +239,7 @@ try:
   str_reserva = f"${total_reserva_dia:,.0f}"
   str_falta = f"${falta_cumplir:,.0f}"
 
-  # --- TARJETAS SUPERIORES (7 columnas en orden exacto solicitado) ---
+  # --- TARJETAS SUPERIORES (Orden exacto: Presupuesto, Venta, Reserva, Falta, Clientes, Impactados, Oportunidad) ---
   col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
 
   with col1:
@@ -290,6 +290,17 @@ try:
     st.markdown(
         f"""
             <div class="metric-card">
+                <div class="metric-title">📊 Total Clientes</div>
+                <div class="metric-value">{total_clientes:,}</div>
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+  with col6:
+    st.markdown(
+        f"""
+            <div class="metric-card">
                 <div class="metric-title">✅ Impactados</div>
                 <div class="metric-value">{impactados_count:,}</div>
                 <div class="metric-delta">{porcentaje_ejecucion_impactos:.1f}% Ejec.</div>
@@ -298,7 +309,7 @@ try:
         unsafe_allow_html=True,
     )
 
-  with col6:
+  with col7:
     st.markdown(
         f"""
             <div class="metric-card">
@@ -309,18 +320,7 @@ try:
         unsafe_allow_html=True,
     )
 
-  with col7:
-    st.markdown(
-        f"""
-            <div class="metric-card">
-                <div class="metric-title">📊 Total Clientes</div>
-                <div class="metric-value">{total_clientes:,}</div>
-            </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-  # Barras de progreso visuales solicitadas
+  # Barras de progreso visuales
   st.markdown("<br>", unsafe_allow_html=True)
   st.progress(
       min(max(porcentaje_ejecucion_impactos / 100.0, 0.0), 1.0),

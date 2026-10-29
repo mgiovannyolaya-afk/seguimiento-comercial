@@ -118,7 +118,7 @@ try:
 
         st.markdown("---")
 
-        # --- GRÁFICOS INTERACTIVOS ---
+        # --- GRÁFICOS INTERACTIVOS (BARRAS) ---
         col_g1, col_g2 = st.columns(2)
 
         with col_g1:
@@ -179,10 +179,34 @@ try:
 
         st.markdown("---")
 
-        # --- TABLA COMPARATIVA DE CLIENTES CON ESTILOS CONDICIONALES ---
+        # --- NUEVO: GRÁFICO DE TENDENCIA MENSUAL (LÍNEAS YoY) ---
+        st.subheader(f"📈 Tendencia Mensual de Ventas ({anio_sel} vs {anio_anterior})")
+        df_tendencia = df_f[df_f[col_anio].isin([anio_sel, anio_anterior])]
+        if not df_tendencia.empty:
+            df_tend = df_tendencia.groupby([col_mes, col_anio])[col_valor].sum().reset_index()
+            df_tend['Mes_Orden'] = df_tend[col_mes].apply(obtener_peso_mes)
+            df_tend = df_tend.sort_values(by='Mes_Orden')
+            df_tend[col_anio] = df_tend[col_anio].astype(str)
+
+            fig_tend = px.line(
+                df_tend, x=col_mes, y=col_valor, color=col_anio, markers=True,
+                labels={col_mes: "Mes", col_valor: "Venta Total ($)", col_anio: "Año"},
+                color_discrete_sequence=['#1f77b4', '#aec7e8']
+            )
+            fig_tend.update_traces(hovertemplate='<b>Mes: %{x}</b><br>Venta: $%{y:,.0f}<extra></extra>')
+            fig_tend.update_layout(xaxis_title="Mes", yaxis_title="Venta Total ($)")
+            st.plotly_chart(fig_tend, use_container_width=True)
+        else:
+            st.info("No hay datos suficientes para la tendencia mensual.")
+
+        st.markdown("---")
+
+        # --- TABLA COMPARATIVA DE CLIENTES CON ESTILOS CONDICIONALES Y DESCARGA ---
         st.subheader("📋 Detalle por Cliente (Año Actual vs. Año Anterior)")
 
-        busqueda_tabla = st.text_input("🔍 Escribe el nombre del cliente para buscar en la tabla:", "")
+        col_busq, col_desc = st.columns([3, 1])
+        with col_busq:
+            busqueda_tabla = st.text_input("🔍 Escribe el nombre del cliente para buscar en la tabla:", "")
 
         ventas_actual = df_actual.groupby(col_cliente)[col_valor].sum().reset_index()
         ventas_actual.rename(columns={col_valor: f'Venta {anio_sel}'}, inplace=True)
@@ -199,6 +223,17 @@ try:
 
         if busqueda_tabla:
             tabla_final = tabla_final[tabla_final[col_cliente].astype(str).str.contains(busqueda_tabla, case=False, na=False)]
+
+        # Botón de descarga CSV
+        with col_desc:
+            st.write("") 
+            csv_data = tabla_final.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Descargar CSV",
+                data=csv_data,
+                file_name=f"detalle_clientes_{anio_sel}.csv",
+                mime="text/csv",
+            )
 
         # Función de estilo condicional robusta para verde (crece) y rojo (decrece)
         def color_variacion(val):

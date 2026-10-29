@@ -16,8 +16,8 @@ try:
     df = cargar_datos()
     columnas = df.columns.tolist()
 
-    # Mapeo por palabras clave exactas para evitar cruce de columnas
-    def buscar_columna_exacta(palabras_clave, fallback_index=0):
+    # Función automática inteligente para encontrar las columnas exactas sin necesidad de manuales
+    def detectar_columna(palabras_clave, fallback_idx=0):
         for pk in palabras_clave:
             for col in columnas:
                 if pk.lower() == str(col).lower():
@@ -26,40 +26,37 @@ try:
             for col in columnas:
                 if pk.lower() in str(col).lower():
                     return col
-        return columnas[fallback_index] if fallback_index < len(columnas) else columnas[0]
+        return columnas[fallback_idx] if fallback_idx < len(columnas) else columnas[0]
 
-    # --- CONFIGURACIÓN EN LA BARRA LATERAL (Solo Filtros Estructurales de Canales/Regionales) ---
-    st.sidebar.header("⚙️ Mapeo de Columnas")
-    st.sidebar.caption("Ajusta si los nombres no coinciden exactamente:")
+    # Asignación automática de columnas tras bambalinas
+    col_canal = detectar_columna(['Canal', 'Canal de Venta'], 0)
+    col_regional = detectar_columna(['Regional', 'Zona', 'Código Zona'], 1)
+    col_gerente = detectar_columna(['Gerente Zona', 'Gerente Unidad', 'Gerente'], 2)
+    col_cliente = detectar_columna(['Nombre Cliente', 'Cliente', 'Documento Cliente'], 3)
+    col_anio = detectar_columna(['Año', 'Anio', 'Year'], 4)
+    col_mes = detectar_columna(['Mes', 'Month'], 5)
+    col_valor = detectar_columna(['Ventas Det', 'Venta', 'Valor', 'Total'], 6)
 
-    col_canal = st.sidebar.selectbox("Canal", columnas, index=columnas.index(buscar_columna_exacta(['Canal', 'Canal de Venta'], 0)))
-    col_regional = st.sidebar.selectbox("Regional / Zona", columnas, index=columnas.index(buscar_columna_exacta(['Código Zona', 'Regional', 'Zona'], 1)))
-    col_gerente = st.sidebar.selectbox("Gerente de Unidad", columnas, index=columnas.index(buscar_columna_exacta(['Gerente Zona', 'Gerente Unidad', 'Gerente'], 2)))
-    col_cliente = st.sidebar.selectbox("Cliente", columnas, index=columnas.index(buscar_columna_exacta(['Nombre Cliente', 'Cliente', 'Documento Cliente'], 3)))
-    col_anio = st.sidebar.selectbox("Año", columnas, index=columnas.index(buscar_columna_exacta(['Año', 'Anio', 'Year'], 4)))
-    col_mes = st.sidebar.selectbox("Mes", columnas, index=columnas.index(buscar_columna_exacta(['Mes', 'Month'], 5)))
-    col_valor = st.sidebar.selectbox("Venta / Valor", columnas, index=columnas.index(buscar_columna_exacta(['Ventas Det', 'Venta', 'Valor', 'Total'], 6)))
-
-    st.sidebar.divider()
-    st.sidebar.header("🎯 Filtros Estructurales")
+    # --- BARRA LATERAL: SOLO FILTROS LIMPIOS ---
+    st.sidebar.header("🎯 Filtros Interactivos")
 
     df_f = df.copy()
 
-    # Filtro Canal
+    # 1. Filtro Canal
     canales_disp = sorted(df_f[col_canal].dropna().unique().astype(str))
-    canales_sel = st.sidebar.multiselect("Canal(es):", canales_disp, default=canales_disp)
+    canales_sel = st.sidebar.multiselect("Canal:", canales_disp, default=canales_disp)
     if canales_sel:
         df_f = df_f[df_f[col_canal].astype(str).isin(canales_sel)]
 
-    # Filtro Regional
+    # 2. Filtro Regional
     regional_disp = sorted(df_f[col_regional].dropna().unique().astype(str))
-    regional_sel = st.sidebar.multiselect("Regional(es):", regional_disp, default=regional_disp)
+    regional_sel = st.sidebar.multiselect("Regional / Zona:", regional_disp, default=regional_disp)
     if regional_sel:
         df_f = df_f[df_f[col_regional].astype(str).isin(regional_sel)]
 
-    # Filtro Gerente
+    # 3. Filtro Gerente de Unidad
     gerente_disp = sorted(df_f[col_gerente].dropna().unique().astype(str))
-    gerente_sel = st.sidebar.multiselect("Gerente(s):", gerente_disp, default=gerente_disp)
+    gerente_sel = st.sidebar.multiselect("Gerente de Unidad:", gerente_disp, default=gerente_disp)
     if gerente_sel:
         df_f = df_f[df_f[col_gerente].astype(str).isin(gerente_sel)]
 
@@ -158,7 +155,7 @@ try:
         
         tabla_final = tabla_final.sort_values(by=f'Venta {anio_sel}', ascending=False)
 
-        # Formatos finales
+        # Formatos finales en moneda
         for col_m in [f'Venta {anio_sel}', f'Venta {anio_anterior}', 'Variación ($)']:
             tabla_final[col_m] = tabla_final[col_m].apply(lambda x: f"${x:,.0f}")
 

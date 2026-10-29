@@ -75,7 +75,7 @@ try:
     if col in df.columns:
       df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-  # Buscar columnas de presupuesto y la nueva columna de % Eje Mes
+  # Buscar columnas de presupuesto y la columna de % Eje Mes
   col_ppto = next(
       (
           c
@@ -289,9 +289,8 @@ try:
       "📋 Detalle Comercial General",
   ])
 
-  # Columnas seleccionadas incluyendo la nueva col_eje_mes
+  # Columnas seleccionadas para la TABLA (SIN incluir col_un para que no se muestre)
   columnas_tabla = [
-      col_un,
       "Canal",
       "Zona",
       "Nit Cliente",
@@ -325,31 +324,48 @@ try:
 
   # Función para renderizar los totales superiores de la tabla
   def mostrar_totales_superiores(df_sub):
-    t_ppto = df_sub[col_ppto].sum() if col_ppto and col_ppto in df_sub.columns else 0
+    t_ppto = (
+        df_sub[col_ppto].sum() if col_ppto and col_ppto in df_sub.columns else 0
+    )
     t_venta = df_sub["TOTAL"].sum() if "TOTAL" in df_sub.columns else 0
-    t_reserva = df_sub["RESERVA DIA"].sum() if "RESERVA DIA" in df_sub.columns else 0
-    
-    # Promedio ponderado o promedio simple de ejecución del mes
+    t_reserva = (
+        df_sub["RESERVA DIA"].sum() if "RESERVA DIA" in df_sub.columns else 0
+    )
+
     t_eje = 0
     if col_eje_mes and col_eje_mes in df_sub.columns and len(df_sub) > 0:
       t_eje = df_sub[col_eje_mes].mean() * 100
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-      st.markdown(f"<div class='summary-box'>📦 Total Presupuesto<br><b>${t_ppto:,.0f}</b></div>", unsafe_allow_html=True)
+      st.markdown(
+          f"<div class='summary-box'>📦 Total Presupuesto<br><b>${t_ppto:,.0f}</b></div>",
+          unsafe_allow_html=True,
+      )
     with c2:
-      st.markdown(f"<div class='summary-box'>💰 Total Venta<br><b>${t_venta:,.0f}</b></div>", unsafe_allow_html=True)
+      st.markdown(
+          f"<div class='summary-box'>💰 Total Venta<br><b>${t_venta:,.0f}</b></div>",
+          unsafe_allow_html=True,
+      )
     with c3:
-      st.markdown(f"<div class='summary-box'>🔥 Total Reserva Día<br><b><b>${t_reserva:,.0f}</b></div>", unsafe_allow_html=True)
+      st.markdown(
+          f"<div class='summary-box'>🔥 Total Reserva Día<br><b>${t_reserva:,.0f}</b></div>",
+          unsafe_allow_html=True,
+      )
     with c4:
-      st.markdown(f"<div class='summary-box'>📈 Promedio % Eje Mes<br><b>{t_eje:.1f}%</b></div>", unsafe_allow_html=True)
+      st.markdown(
+          f"<div class='summary-box'>📈 Promedio % Eje Mes<br><b>{t_eje:.1f}%</b></div>",
+          unsafe_allow_html=True,
+      )
 
 
   with pestana1:
     st.subheader("🔍 Clientes Pendientes por Impactar (Oportunidad)")
     if "IMPACTO" in df_filtrado.columns:
       df_opp = df_filtrado[df_filtrado["IMPACTO"] == 0]
-      st.metric(label="Clientes Pendientes en este filtro", value=f"{len(df_opp):,}")
+      st.metric(
+          label="Clientes Pendientes en este filtro", value=f"{len(df_opp):,}"
+      )
       mostrar_totales_superiores(df_opp)
       st.dataframe(
           formatear_dataframe(df_opp[cols_disponibles]),
@@ -363,7 +379,9 @@ try:
     st.subheader("✅ Clientes Impactados Exitosamente")
     if "IMPACTO" in df_filtrado.columns:
       df_imp = df_filtrado[df_filtrado["IMPACTO"] == 1]
-      st.metric(label="Clientes Impactados en este filtro", value=f"{len(df_imp):,}")
+      st.metric(
+          label="Clientes Impactados en este filtro", value=f"{len(df_imp):,}"
+      )
       mostrar_totales_superiores(df_imp)
       st.dataframe(
           formatear_dataframe(df_imp[cols_disponibles]),

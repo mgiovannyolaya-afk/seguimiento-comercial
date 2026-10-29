@@ -13,7 +13,7 @@ st.markdown("""
         .main { background-color: #f8f9fa; }
         .metric-card {
             background-color: #ffffff;
-            padding: 15px;
+            padding: 12px;
             border-radius: 10px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             text-align: center;
@@ -30,13 +30,13 @@ st.markdown("""
             margin-bottom: 15px;
         }
         .metric-title {
-            font-size: 13px;
+            font-size: 12px;
             color: #6c757d;
             font-weight: 600;
-            margin-bottom: 5px;
+            margin-bottom: 4px;
         }
         .metric-value {
-            font-size: 18px;
+            font-size: 16px;
             color: #212529;
             font-weight: 700;
             white-space: nowrap;
@@ -44,7 +44,7 @@ st.markdown("""
         .metric-delta {
             font-size: 11px;
             color: #28a745;
-            margin-top: 5px;
+            margin-top: 4px;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -75,7 +75,7 @@ try:
     if col in df.columns:
       df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-  # Buscar columnas de presupuesto y asegurar que tomamos estrictamente % Eje Mes (ignorando decrecimiento)
+  # Buscar columnas de presupuesto y la columna de % Eje Mes
   col_ppto = next(
       (
           c
@@ -218,22 +218,28 @@ try:
       else 0
   )
   total_ppto_gen = (
-      df_filtrado[col_ppto].sum() if col_ppto and col_ppto in df_filtrado.columns else 0
+      df_filtrado[col_ppto].sum()
+      if col_ppto and col_ppto in df_filtrado.columns
+      else 0
   )
-  falta_cumplir = max(0, total_ppto_gen - total_ventas)
+
+  # Lógica solicitada: Presupuesto - (Venta + Reserva)
+  venta_mas_reserva = total_ventas + total_reserva_dia
+  falta_cumplir = max(0, total_ppto_gen - venta_mas_reserva)
 
   str_ventas = f"${total_ventas:,.0f}"
   str_reserva = f"${total_reserva_dia:,.0f}"
+  str_ppto = f"${total_ppto_gen:,.0f}"
   str_falta = f"${falta_cumplir:,.0f}"
 
-  # --- TARJETAS SUPERIORES (6 columnas) ---
-  col1, col2, col3, col4, col5, col6 = st.columns(6)
+  # --- TARJETAS SUPERIORES (7 columnas) ---
+  col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
 
   with col1:
     st.markdown(
         f"""
             <div class="metric-card">
-                <div class="metric-title">📊 Total Clientes</div>
+                <div class="metric-title">📊 Clientes</div>
                 <div class="metric-value">{total_clientes:,}</div>
             </div>
         """,
@@ -256,7 +262,7 @@ try:
     st.markdown(
         f"""
             <div class="metric-card">
-                <div class="metric-title">⚠️ Con Oportunidad</div>
+                <div class="metric-title">⚠️ Oportunidad</div>
                 <div class="metric-value">{oportunidad_count:,}</div>
             </div>
         """,
@@ -289,7 +295,18 @@ try:
     st.markdown(
         f"""
             <div class="metric-card">
-                <div class="metric-title">🎯 Falta para Cumplir</div>
+                <div class="metric-title">📦 Presupuesto</div>
+                <div class="metric-value">{str_ppto}</div>
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+  with col7:
+    st.markdown(
+        f"""
+            <div class="metric-card">
+                <div class="metric-title">🎯 Falta Cumplir</div>
                 <div class="metric-value" style="color: #d9534f;">{str_falta}</div>
             </div>
         """,
@@ -311,7 +328,7 @@ try:
       "📋 Detalle Comercial General",
   ])
 
-  # Columnas seleccionadas para la TABLA (Incluyendo % Eje Mes y quitando decremento)
+  # Columnas seleccionadas para la TABLA
   columnas_tabla = [
       "Canal",
       "Zona",
@@ -332,7 +349,9 @@ try:
   # Función para formatear valores monetarios y porcentajes en la vista
   def formatear_dataframe(df_in):
     df_out = df_in.copy()
-    cols_moneda = [c for c in ["TOTAL", "RESERVA DIA", col_ppto] if c in df_out.columns]
+    cols_moneda = [
+        c for c in ["TOTAL", "RESERVA DIA", col_ppto] if c in df_out.columns
+    ]
     for col in cols_moneda:
       df_out[col] = df_out[col].apply(
           lambda x: f"${x:,.0f}" if pd.notnull(x) and x != 0 else "$0"
@@ -420,7 +439,7 @@ try:
         formatear_dataframe(df_filtrado[cols_disponibles]),
         use_container_width=True,
         height=420,
-    )
+      )
 
 except Exception as e:
   st.error(

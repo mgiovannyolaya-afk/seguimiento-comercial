@@ -1,4 +1,5 @@
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 # Configuración de la página con diseño ancho y moderno
@@ -17,7 +18,8 @@ st.markdown("""
 # Título principal del tablero
 st.title("🎯 Control de Oportunidades y Cumplimiento (Meta 70%)")
 st.markdown(
-    "Monitoreo interactivo de canales, ejecución de impactos y ventas totales."
+    "Monitoreo interactivo de canales, ejecución de impactos, ventas en pesos y"
+    " reserva actualizada."
 )
 st.markdown("---")
 
@@ -34,11 +36,17 @@ try:
   # Asegurar formato numérico en columnas clave
   if "IMPACTO" in df.columns:
     df["IMPACTO"] = pd.to_numeric(df["IMPACTO"], errors="coerce").fillna(0)
+  if "TOTAL" in df.columns:
+    df["TOTAL"] = pd.to_numeric(df["TOTAL"], errors="coerce").fillna(0)
+  if "RESERVA DIA" in df.columns:
+    df["RESERVA DIA"] = pd.to_numeric(df["RESERVA DIA"], errors="coerce").fillna(
+        0
+    )
 
   # --- BARRA LATERAL DE FILTROS INTERACTIVOS ---
   st.sidebar.header("🔍 Filtros de Segmentación")
 
-  # 1. Filtro de Canal (Muestra todos los canales de la hoja)
+  # 1. Filtro de Canal
   canales = ["Todos"] + sorted(
       df["Canal"].dropna().astype(str).unique().tolist()
   )
@@ -90,17 +98,9 @@ try:
       (impactados_count / total_clientes * 100) if total_clientes > 0 else 0
   )
 
-  # Suma dinámica de ventas totales y reservas
-  total_ventas = (
-      pd.to_numeric(df_filtrado["TOTAL"], errors="coerce").sum()
-      if "TOTAL" in df_filtrado.columns
-      else 0
-  )
-  total_reserva = (
-      pd.to_numeric(df_filtrado["Reserva"], errors="coerce").sum()
-      if "Reserva" in df_filtrado.columns
-      else 0
-  )
+  # Totales en pesos (Ventas 'TOTAL' y Reserva actualizada 'RESERVA DIA')
+  total_ventas = df_filtrado["TOTAL"].sum()
+  total_reserva_dia = df_filtrado["RESERVA DIA"].sum()
 
   # --- TARJETAS DE MÉTRICAS SUPERIORES (KPIs) ---
   col1, col2, col3, col4, col5 = st.columns(5)
@@ -118,26 +118,58 @@ try:
         label="⚠️ Con Oportunidad (Falta)", value=f"{oportunidad_count:,}"
     )
   with col4:
-    st.metric(label="💰 Venta Total", value=f"${total_ventas:,.0f}")
+    st.metric(label="💰 Venta Total ($)", value=f"${total_ventas:,.0f}")
   with col5:
-    st.metric(label="🎯 Meta Comercial", value="70%")
+    st.metric(
+        label="🔥 Reserva Día ($)", value=f"${total_reserva_dia:,.0f}"
+    )
 
-  # Barra de progreso visual para el porcentaje de ejecución de impactos
+  # Barra de progreso visual para el porcentaje de ejecución
   st.progress(
       min(max(porcentaje_ejecucion / 100.0, 0.0), 1.0),
-      text=(
-          f"Progreso de Ejecución de Impactos ({impact_txt if 'impact_txt' in locals() else 'Filtro Actual'}):"
-          f" {porcentaje_ejecucion:.1f}%"
-      ),
+      text=f"Progreso de Ejecución de Impactos: {porcentaje_ejecucion:.1f}%",
   )
   st.markdown("---")
 
-  # --- PESTAÑAS DE NAVEGACIÓN ---
-  pestana1, pestana2, pestana3 = st.tabs([
+  # --- PESTAÑAS DE NAVEGACIÓN Y GRÁFICOS ---
+  pestana1, pestana2, pestana3, pestana4 = st.tabs([
+      "📈 Gráficos Interactivos",
       "🎯 Clientes con Oportunidad (Falta Impactar)",
       "✅ Clientes Impactados (Con Ventas)",
       "📋 Detalle Comercial General",
   ])
+
+  with pestana1:
+    st.subheader(
+        "📊 Análisis Visual de Ventas y Reservas del Día por Canal"
+    )
+
+    if not df_filtrado.empty:
+      # Agrupar por canal para el gráfico
+      df_grafico = (
+          df_filtrado.groupby("Canal")[["TOTAL", "RESERVA DIA"]]
+          .sum()
+          .reset_index()
+      )
+
+      # Gráfico de barras interactivo con Plotly
+      fig = px.bar(
+          df_grafico,
+          x="Canal",
+          y=["TOTAL", "RESERVA DIA"],
+          title="Venta Total vs Reserva del Día por Canal",
+          labels={"value": "Valor en Pesos ($)", "variable": "Métrica"},
+          barmode="group",
+          color_discrete_sequence=["#1f77b4", "#ff7f0e"],
+      )
+      fig.update_layout(
+          xaxis_tickangle=-45,
+          plot_bgcolor="rgba(0,0,0,0)",
+          paper_bgcolor="rgba(0,0,0,0)",
+      )
+      st.plotly_chart(fig, use_container_width=True)
+    else:
+      st.info("No hay datos suficientes para mostrar el gráfico.")
 
   # Columnas clave para mostrar ordenadas
   columnas_principales = [
@@ -149,7 +181,7 @@ try:
       "Nombre Cliente",
       "Ciudad",
       "TOTAL",
-      "Reserva",
+      "RESERVA DIA",
       "Total Cartera",
       "%Eje Ppto",
   ]
@@ -157,7 +189,7 @@ try:
       c for c in columnas_principales if c in df_filtrado.columns
   ]
 
-  with pestana1:
+  with pestana2:
     st.subheader("🔍 Clientes Pendientes por Impactar (Oportunidad)")
     if "IMPACTO" in df_filtrado.columns:
       df_opp = df_filtrado[df_filtrado["IMPACTO"] == 0]
@@ -165,12 +197,12 @@ try:
           label="Clientes Pendientes en este filtro", value=f"{len(df_opp):,}"
       )
       st.dataframe(
-          df_opp[cols_disponibles], use_container_width=True, height=450
+          df_opp[cols_disponibles], use_container_width=ToolTip := True, height=450
       )
     else:
       st.info("No se encontró la columna IMPACTO.")
 
-  with pestana2:
+  with pestana3:
     st.subheader("✅ Clientes Impactados Exitosamente")
     if "IMPACTO" in df_filtrado.columns:
       df_imp = df_filtrado[df_filtrado["IMPACTO"] == 1]
@@ -183,7 +215,7 @@ try:
     else:
       st.info("No se encontró la columna IMPACTO.")
 
-  with pestana3:
+  with pestana4:
     st.subheader("📋 Base de Datos General (Filtrada)")
     st.dataframe(
         df_filtrado[cols_disponibles], use_container_width=True, height=450

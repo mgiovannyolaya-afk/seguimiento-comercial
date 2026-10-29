@@ -16,7 +16,7 @@ try:
     df = cargar_datos()
     columnas = df.columns.tolist()
 
-    # Mapeo por palabras clave exactas para evitar que se dupliquen las columnas
+    # Mapeo por palabras clave exactas para evitar cruce de columnas
     def buscar_columna_exacta(palabras_clave, fallback_index=0):
         for pk in palabras_clave:
             for col in columnas:
@@ -28,11 +28,10 @@ try:
                     return col
         return columnas[fallback_index] if fallback_index < len(columnas) else columnas[0]
 
-    # --- CONFIGURACIÓN EN LA BARRA LATERAL ---
+    # --- CONFIGURACIÓN EN LA BARRA LATERAL (Solo Filtros Estructurales de Canales/Regionales) ---
     st.sidebar.header("⚙️ Mapeo de Columnas")
     st.sidebar.caption("Ajusta si los nombres no coinciden exactamente:")
 
-    # Selección explícita con valores por defecto bien buscados
     col_canal = st.sidebar.selectbox("Canal", columnas, index=columnas.index(buscar_columna_exacta(['Canal', 'Canal de Venta'], 0)))
     col_regional = st.sidebar.selectbox("Regional / Zona", columnas, index=columnas.index(buscar_columna_exacta(['Código Zona', 'Regional', 'Zona'], 1)))
     col_gerente = st.sidebar.selectbox("Gerente de Unidad", columnas, index=columnas.index(buscar_columna_exacta(['Gerente Zona', 'Gerente Unidad', 'Gerente'], 2)))
@@ -64,27 +63,28 @@ try:
     if gerente_sel:
         df_f = df_f[df_f[col_gerente].astype(str).isin(gerente_sel)]
 
-    # Filtro Año Base
-    anios_disp = sorted(df_f[col_anio].dropna().unique())
-    anio_base = st.sidebar.selectbox("Año Base Comparativo:", anios_disp, index=len(anios_disp)-1 if anios_disp else 0)
-
     # Asegurar tipos de datos numéricos
     df_f[col_valor] = pd.to_numeric(df_f[col_valor], errors='coerce').fillna(0)
     df_f[col_anio] = pd.to_numeric(df_f[col_anio], errors='coerce')
 
-    # --- CUERPO PRINCIPAL: BOTONES INTERACTIVOS DE MESES CON UN CLIC ---
-    st.subheader("📅 Filtro de Meses (Un Clic para Seleccionar/Desseleccionar)")
+    # --- CUERPO PRINCIPAL: FILTROS DE AÑO Y MESES ARRIBA ---
+    st.subheader("📅 Panel de Control Temporal")
+    
+    col_f1, col_f2 = st.columns([1, 3])
+    
+    with col_f1:
+        anios_disp = sorted(df_f[col_anio].dropna().unique())
+        anio_base = st.selectbox("Selecciona el Año Base:", anios_disp, index=len(anios_disp)-1 if anios_disp else 0)
 
-    # Ordenar meses cronológicamente si es posible
-    meses_ordenados = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
-    meses_existentes = df_f[col_mes].dropna().unique()
-    meses_disp = [m for m in meses_ordenados if m in meses_existentes] if any(m in meses_existentes for m in meses_ordenados) else sorted(meses_existentes)
+    with col_f2:
+        meses_ordenados = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+        meses_existentes = df_f[col_mes].dropna().unique()
+        meses_disp = [m for m in meses_ordenados if m in meses_existentes] if any(m in meses_existentes for m in meses_ordenados) else sorted(meses_existentes)
 
-    # Botones o Segmented Control para seleccionar con un clic
-    if hasattr(st, "segmented_control"):
-        meses_sel = st.segmented_control("Selecciona los meses activos:", options=meses_disp, default=meses_disp, selection_mode="multi")
-    else:
-        meses_sel = st.multiselect("Selecciona los meses activos:", options=meses_disp, default=list(meses_disp))
+        if hasattr(st, "segmented_control"):
+            meses_sel = st.segmented_control("Selecciona los meses activos (Un Clic):", options=meses_disp, default=meses_disp, selection_mode="multi")
+        else:
+            meses_sel = st.multiselect("Selecciona los meses activos:", options=meses_disp, default=list(meses_disp))
 
     st.markdown("---")
 
@@ -168,7 +168,7 @@ try:
         st.dataframe(tabla_final, use_container_width=True)
 
     else:
-        st.warning("⚠️ Selecciona un Año Base y al menos un Mes arriba.")
+        st.warning("⚠️ Selecciona un Año Base y al menos un Mes.")
 
 except Exception as e:
     st.error(f"Ocurrió un error al procesar la aplicación: {e}")

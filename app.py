@@ -7,11 +7,34 @@ st.set_page_config(
     page_title="Gestión Comercial - Meta 70%", page_icon="🎯", layout="wide"
 )
 
-# Estilo visual corporativo limpio
+# Estilo visual corporativo y tarjetas personalizadas para evitar recortes (...)
 st.markdown("""
     <style>
         .main { background-color: #f8f9fa; }
-        .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .metric-card {
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            text-align: center;
+            border: 1px solid #e9ecef;
+        }
+        .metric-title {
+            font-size: 14px;
+            color: #6c757d;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        .metric-value {
+            font-size: 22px;
+            color: #212529;
+            font-weight: 700;
+        }
+        .metric-delta {
+            font-size: 12px;
+            color: #28a745;
+            margin-top: 5px;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -131,31 +154,71 @@ try:
   total_ventas = df_filtrado["TOTAL"].sum()
   total_reserva_dia = df_filtrado["RESERVA DIA"].sum()
 
-  # --- TARJETAS DE MÉTRICAS SUPERIORES (KPIs) con valor completo ---
+  # Formatear montos en pesos con separadores de miles y sin recortes
+  str_ventas = f"${total_ventas:,.2f}"
+  str_reserva = f"${total_reserva_dia:,.2f}"
+
+  # --- TARJETAS SUPERIORES CON HTML PERSONALIZADO (Sin recortes) ---
   col1, col2, col3, col4, col5 = st.columns(5)
 
   with col1:
-    st.metric(label="📊 Total Clientes", value=f"{total_clientes:,}")
+    st.markdown(
+        f"""
+            <div class="metric-card">
+                <div class="metric-title">📊 Total Clientes</div>
+                <div class="metric-value">{total_clientes:,}</div>
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
   with col2:
-    st.metric(
-        label="✅ Clientes Impactados",
-        value=f"{impactados_count:,}",
-        delta=f"{porcentaje_ejecucion:.1f}% Ejecución",
+    st.markdown(
+        f"""
+            <div class="metric-card">
+                <div class="metric-title">✅ Clientes Impactados</div>
+                <div class="metric-value">{impactados_count:,}</div>
+                <div class="metric-delta">{porcentaje_ejecucion:.1f}% Ejecución</div>
+            </div>
+        """,
+        unsafe_allow_html=True,
     )
+
   with col3:
-    st.metric(
-        label="⚠️ Con Oportunidad (Falta)", value=f"{oportunidad_count:,}"
+    st.markdown(
+        f"""
+            <div class="metric-card">
+                <div class="metric-title">⚠️ Con Oportunidad</div>
+                <div class="metric-value">{oportunidad_count:,}</div>
+            </div>
+        """,
+        unsafe_allow_html=True,
     )
+
   with col4:
-    st.metric(
-        label="💰 Venta Total ($)", value=f"${total_ventas:,.2f}"
-    )  # Valor completo con decimales
+    st.markdown(
+        f"""
+            <div class="metric-card">
+                <div class="metric-title">💰 Venta Total ($)</div>
+                <div class="metric-value" style="font-size: 18px;">{str_ventas}</div>
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
   with col5:
-    st.metric(
-        label="🔥 Reserva Día ($)", value=f"${total_reserva_dia:,.2f}"
-    )  # Valor completo con decimales
+    st.markdown(
+        f"""
+            <div class="metric-card">
+                <div class="metric-title">🔥 Reserva Día ($)</div>
+                <div class="metric-value" style="font-size: 18px;">{str_reserva}</div>
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
   # Barra de progreso visual para el porcentaje de ejecución
+  st.markdown("<br>", unsafe_allow_html=True)
   st.progress(
       min(max(porcentaje_ejecucion / 100.0, 0.0), 1.0),
       text=f"Progreso de Ejecución de Impactos: {porcentaje_ejecucion:.1f}%",

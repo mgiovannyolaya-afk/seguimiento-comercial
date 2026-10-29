@@ -57,15 +57,38 @@ def cargar_datos():
 try:
   df = cargar_datos()
 
+  # Limpiar nombres de columnas por si tienen espacios ocultos
+  df.columns = df.columns.str.strip()
+
   # Asegurar formato numérico en columnas clave
-  if "IMPACTO" in df.columns:
-    df["IMPACTO"] = pd.to_numeric(df["IMPACTO"], errors="coerce").fillna(0)
-  if "TOTAL" in df.columns:
-    df["TOTAL"] = pd.to_numeric(df["TOTAL"], errors="coerce").fillna(0)
-  if "RESERVA DIA" in df.columns:
-    df["RESERVA DIA"] = pd.to_numeric(df["RESERVA DIA"], errors="coerce").fillna(
-        0
-    )
+  for col in ["IMPACTO", "TOTAL", "RESERVA DIA"]:
+    if col in df.columns:
+      df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+  # Buscar columnas de presupuesto y porcentaje de ejecución con nombres flexibles
+  col_ppto = next(
+      (
+          c
+          for c in df.columns
+          if "ppto" in c.lower()
+          or "presupuesto" in c.lower()
+          or "pto" in c.lower()
+      ),
+      None,
+  )
+  col_eje = next(
+      (
+          c
+          for c in df.columns
+          if "%" in c or "eje" in c.lower() or "cumplimiento" in c.lower()
+      ),
+      None,
+  )
+
+  if col_ppto:
+    df[col_ppto] = pd.to_numeric(df[col_ppto], errors="coerce").fillna(0)
+  if col_eje:
+    df[col_eje] = pd.to_numeric(df[col_eje], errors="coerce").fillna(0)
 
   # --- BARRA LATERAL DE FILTROS Y GRÁFICO ---
   st.sidebar.header("🔍 Filtros de Segmentación")
@@ -251,24 +274,39 @@ try:
       "📋 Detalle Comercial General",
   ])
 
-  # Columnas para la TABLA (Excluyendo Supervisor y Vendedor visualmente)
+  # Columnas seleccionadas
   columnas_tabla = [
       col_un,
       "Canal",
       "Zona",
       "Nit Cliente",
       "Nombre Cliente",
-      "Ciudad",
+      col_ppto,
       "TOTAL",
       "RESERVA DIA",
-      "Total Cartera",
-      "%Eje Ppto",
+      col_eje,
   ]
   cols_disponibles = [
       c
       for c in columnas_tabla
       if c is not None and c in df_filtrado.columns
   ]
+
+
+  # Función para formatear valores monetarios y porcentajes en la vista
+  def formatear_dataframe(df_in):
+    df_out = df_in.copy()
+    cols_moneda = [c for c in ["TOTAL", "RESERVA DIA", col_ppto] if c in df_out.columns]
+    for col in cols_moneda:
+      df_out[col] = df_out[col].apply(
+          lambda x: f"${x:,.0f}" if pd.notnull(x) and x != 0 else "$0"
+      )
+    if col_eje and col_eje in df_out.columns:
+      df_out[col_eje] = df_out[col_eje].apply(
+          lambda x: f"{x * 100:.1f}%" if pd.notnull(x) else "0.0%"
+      )
+    return df_out
+
 
   with pestana1:
     st.subheader("🔍 Clientes Pendientes por Impactar (Oportunidad)")
@@ -278,20 +316,26 @@ try:
           label="Clientes Pendientes en este filtro", value=f"{len(df_opp):,}"
       )
       st.dataframe(
-          df_opp[cols_disponibles], use_container_width=True, height=450
+          formatear_dataframe(df_opp[cols_disponibles]),
+          use_container_width=True,
+          height=450,
       )
     else:
       st.info("No se encontró la columna IMPACTO.")
 
   with pestana2:
-    st.subheader("✅ Clientes Impactados Exitosamente")
+    st.subheader(
+        "✅ Clientes Impactados Exitosamente (Presupuesto, Venta y Ejecución)"
+    )
     if "IMPACTO" in df_filtrado.columns:
       df_imp = df_filtrado[df_filtrado["IMPACTO"] == 1]
       st.metric(
           label="Clientes Impactados en este filtro", value=f"{len(df_imp):,}"
       )
       st.dataframe(
-          df_imp[cols_disponibles], use_container_width=True, height=450
+          formatear_dataframe(df_imp[cols_disponibles]),
+          use_container_width=True,
+          height=450,
       )
     else:
       st.info("No se encontró la columna IMPACTO.")
@@ -299,7 +343,9 @@ try:
   with pestana3:
     st.subheader("📋 Base de Datos General (Filtrada)")
     st.dataframe(
-        df_filtrado[cols_disponibles], use_container_width=True, height=450
+        formatear_dataframe(df_filtrado[cols_disponibles]),
+        use_container_width=True,
+        height=450,
     )
 
 except Exception as e:

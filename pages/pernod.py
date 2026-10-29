@@ -13,42 +13,47 @@ try:
     df = cargar_datos()
     columnas = df.columns.tolist()
 
-    # Función auxiliar para detectar columnas automáticamente
-    def buscar_col(palabras):
-        for p in palabras:
-            for c in columnas:
-                if p.lower() in str(c).lower():
-                    return c
-        return columnas[0]
+    # Función robusta para asignar índices distintos por defecto y evitar duplicados
+    def safe_index(keywords, default_pos):
+        for kw in keywords:
+            for idx, col in enumerate(columnas):
+                if kw.lower() in str(col).lower():
+                    return idx
+        return min(default_pos, len(columnas) - 1)
 
     st.sidebar.header("⚙️ Configuración de Columnas")
-    st.sidebar.caption("Verifica y ajusta si el nombre difiere en tu Excel:")
+    st.sidebar.caption("Verifica que cada selector tenga su columna respectiva:")
     
-    col_canal = st.sidebar.selectbox("Columna de Canal", columnas, index=columnas.index(buscar_col(['canal'])))
-    col_regional = st.sidebar.selectbox("Columna de Regional", columnas, index=columnas.index(buscar_col(['regional', 'zona', 'reg'])))
-    col_gerente = st.sidebar.selectbox("Columna de Gerente de Unidad", columnas, index=columnas.index(buscar_col(['gerente', 'unidad', 'jefe'])))
-    col_cliente = st.sidebar.selectbox("Columna de Cliente", columnas, index=columnas.index(buscar_col(['cliente', 'tercero', 'nombre'])))
-    col_anio = st.sidebar.selectbox("Columna de Año", columnas, index=columnas.index(buscar_col(['año', 'anio', 'year'])))
-    col_mes = st.sidebar.selectbox("Columna de Mes", columnas, index=columnas.index(buscar_col(['mes', 'month'])))
-    col_valor = st.sidebar.selectbox("Columna de Venta / Valor", columnas, index=columnas.index(buscar_col(['venta', 'valor', 'total', 'neto'])))
+    col_canal = st.sidebar.selectbox("Columna de Canal", columnas, index=safe_index(['canal'], 0))
+    col_regional = st.sidebar.selectbox("Columna de Regional / Zona", columnas, index=safe_index(['regional', 'zona', 'reg'], 1))
+    col_gerente = st.sidebar.selectbox("Columna de Gerente de Unidad', 'gerente", columnas, index=safe_index(['gerente', 'unidad', 'jefe'], 2))
+    col_cliente = st.sidebar.selectbox("Columna de Cliente", columnas, index=safe_index(['cliente', 'tercero', 'nombre'], 3))
+    col_anio = st.sidebar.selectbox("Columna de Año", columnas, index=safe_index(['año', 'anio', 'year'], 4))
+    col_mes = st.sidebar.selectbox("Columna de Mes", columnas, index=safe_index(['mes', 'month'], 5))
+    col_valor = st.sidebar.selectbox("Columna de Venta / Valor", columnas, index=safe_index(['venta', 'valor', 'total', 'neto'], 6))
 
     st.sidebar.divider()
     st.sidebar.header("🎯 Filtros Interactivos")
 
+    df_f = df.copy()
+
     # 1. Filtro Canal
-    canales_disp = sorted(df[col_canal].dropna().unique().astype(str))
+    canales_disp = sorted(df_f[col_canal].dropna().unique().astype(str))
     canales_sel = st.sidebar.multiselect("Selecciona Canal(es):", canales_disp, default=canales_disp)
-    df_f = df[df[col_canal].astype(str).isin(canales_sel)]
+    if canales_sel:
+        df_f = df_f[df_f[col_canal].astype(str).isin(canales_sel)]
 
     # 2. Filtro Regional
     regional_disp = sorted(df_f[col_regional].dropna().unique().astype(str))
     regional_sel = st.sidebar.multiselect("Selecciona Regional(es):", regional_disp, default=regional_disp)
-    df_f = df_f[df_f[col_regional].astype(str).isin(regional_sel)]
+    if regional_sel:
+        df_f = df_f[df_f[col_regional].astype(str).isin(regional_sel)]
 
     # 3. Filtro Gerente de Unidad
     gerente_disp = sorted(df_f[col_gerente].dropna().unique().astype(str))
     gerente_sel = st.sidebar.multiselect("Selecciona Gerente(s) de Unidad:", gerente_disp, default=gerente_disp)
-    df_f = df_f[df_f[col_gerente].astype(str).isin(gerente_sel)]
+    if gerente_sel:
+        df_f = df_f[df_f[col_gerente].astype(str).isin(gerente_sel)]
 
     # 4. Filtro de Años y Meses
     anios_disp = sorted(df_f[col_anio].dropna().unique())

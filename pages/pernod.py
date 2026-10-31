@@ -3,9 +3,16 @@ import pandas as pd
 import plotly.express as px
 
 # Configuración de la página
-st.set_page_config(page_title="Seguimiento BV Pernod", layout="wide")
+st.set_page_config(page_title="Seguimiento Pernod General", layout="wide")
 
-st.title("🍾 Seguimiento BV Pernod - Dashboard Comercial")
+# --- CABECERA VISUAL CON IMAGEN ESTILO LICORERÍA PRÉMIUM Y TÍTULO ---
+st.image(
+    "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?q=80&w=1600&auto=format&fit=crop", 
+    use_container_width=True, 
+    caption="Pernod Ricard - Control Comercial y Distribución"
+)
+
+st.title("🥃 Seguimiento Pernod General")
 st.markdown("---")
 
 @st.cache_data
@@ -32,7 +39,7 @@ try:
     col_regional = detectar_columna(['Código UN', 'Cod UN', 'Regional', 'Región'], 1)
     col_canal = detectar_columna(['Tipo de Cliente', 'Tipo cliente', 'Canal', 'Canal de Venta'], 0)
     col_gerente = detectar_columna(['Gerente Zona', 'Gerente Unidad', 'Supervisor', 'Gerente'], 2)
-    col_zona = detectar_columna(['Zona', 'Subzona', 'Area'], 3)
+    col_zona = detectar_columna(['Cód Zona', 'Cod Zona', 'Id Zona', 'Zona', 'Subzona'], 3)
     col_cliente = detectar_columna(['Nombre Cliente', 'Cliente', 'Documento Cliente'], 4)
     col_anio = detectar_columna(['Año', 'Anio', 'Year'], 5)
     col_mes = detectar_columna(['Mes', 'Month'], 6)
@@ -70,9 +77,9 @@ try:
         df_f = df_f[df_f[col_gerente].astype(str) == sel_gerente]
         df_f_global = df_f_global[df_f_global[col_gerente].astype(str) == sel_gerente]
 
-    # 4. Filtro de Zona
+    # 4. Filtro de Zona (Códigos como PEC001, PEB001, etc.)
     opciones_zona = ["Todos"] + sorted([str(x) for x in df_f[col_zona].dropna().unique()])
-    sel_zona = st.sidebar.selectbox("Zona", opciones_zona, index=0)
+    sel_zona = st.sidebar.selectbox("Código Zona", opciones_zona, index=0)
     if sel_zona != "Todos":
         df_f = df_f[df_f[col_zona].astype(str) == sel_zona]
         df_f_global = df_f_global[df_f_global[col_zona].astype(str) == sel_zona]

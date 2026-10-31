@@ -5,12 +5,12 @@ import plotly.express as px
 # Configuración de la página
 st.set_page_config(page_title="Seguimiento Pernod General", layout="wide")
 
-# --- CABECERA VISUAL: BARRAS Y BOTELLAS DE LICOR AJUSTADAS Y VISIBLES ---
+# --- LOGOTIPO OFICIAL DE PERNOD RICARD (A LO ANCHO Y TAMAÑO IDEAL) ---
 st.markdown(
     """
-    <div style="width: 100%; background-color: #111111; margin-bottom: 15px; overflow: hidden; border-radius: 6px; text-align: center;">
-        <img src="https://images.unsplash.com/photo-1569529465841-dfecdab7503b?q=80&w=1600&auto=format&fit=crop" 
-             style="height: 130px; object-fit: contain; display: inline-block;">
+    <div style="width: 100%; background-color: #ffffff; margin-bottom: 15px; text-align: center;">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Pernod_Ricard_logo.svg/1024px-Pernod_Ricard_logo.svg.png" 
+             style="width: 100%; max-width: 650px; max-height: 120px; object-fit: contain; display: inline-block;">
     </div>
     """,
     unsafe_allow_html=True

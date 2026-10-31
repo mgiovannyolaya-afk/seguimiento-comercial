@@ -5,10 +5,15 @@ import plotly.express as px
 # Configuración de la página
 st.set_page_config(page_title="Seguimiento Pernod General", layout="wide")
 
-# --- CABECERA VISUAL: BANNER HORIZONTAL DE LICORES A LO ANCHO ---
-st.image(
-    "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?q=80&w=1600&auto=format&fit=crop", 
-    use_container_width=True
+# --- CABECERA VISUAL: BANNER DELGADO Y ELEGANTE A LO ANCHO ---
+st.markdown(
+    """
+    <div style="width: 100%; margin-bottom: 15px; overflow: hidden; border-radius: 6px;">
+        <img src="https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?q=80&w=1600&auto=format&fit=crop" 
+             style="width: 100%; max-height: 130px; object-fit: cover; display: block;">
+    </div>
+    """,
+    unsafe_allow_html=True
 )
 
 st.title("🥃 Seguimiento Pernod General")

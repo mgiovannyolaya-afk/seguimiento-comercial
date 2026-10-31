@@ -32,10 +32,11 @@ try:
     col_regional = detectar_columna(['Código UN', 'Cod UN', 'Regional', 'Región'], 1)
     col_canal = detectar_columna(['Tipo de Cliente', 'Tipo cliente', 'Canal', 'Canal de Venta'], 0)
     col_gerente = detectar_columna(['Gerente Zona', 'Gerente Unidad', 'Supervisor', 'Gerente'], 2)
-    col_cliente = detectar_columna(['Nombre Cliente', 'Cliente', 'Documento Cliente'], 3)
-    col_anio = detectar_columna(['Año', 'Anio', 'Year'], 4)
-    col_mes = detectar_columna(['Mes', 'Month'], 5)
-    col_valor = detectar_columna(['Ventas Det', 'Venta', 'Valor', 'Total'], 6)
+    col_zona = detectar_columna(['Zona', 'Subzona', 'Area'], 3) # Detección para la columna Zona
+    col_cliente = detectar_columna(['Nombre Cliente', 'Cliente', 'Documento Cliente'], 4)
+    col_anio = detectar_columna(['Año', 'Anio', 'Year'], 5)
+    col_mes = detectar_columna(['Mes', 'Month'], 6)
+    col_valor = detectar_columna(['Ventas Det', 'Venta', 'Valor', 'Total'], 7)
 
     # Asegurar tipo numérico limpio en la columna de valor global
     df[col_valor] = pd.to_numeric(df[col_valor], errors='coerce').fillna(0)
@@ -49,6 +50,10 @@ try:
     # 1. Código UN (Regional)
     opciones_reg = ["Todos"] + sorted([str(x) for x in df_f[col_regional].dropna().unique()])
     sel_reg = st.sidebar.selectbox("Código UN (Regional)", opciones_reg, index=0)
+    
+    # Nota: Guardamos una copia de df_f antes de filtrar por Código UN para la tabla resumen fija
+    df_f_global = df_f.copy()
+
     if sel_reg != "Todos":
         df_f = df_f[df_f[col_regional].astype(str) == sel_reg]
 
@@ -57,12 +62,21 @@ try:
     sel_canal = st.sidebar.selectbox("Canal", opciones_canal, index=0)
     if sel_canal != "Todos":
         df_f = df_f[df_f[col_canal].astype(str) == sel_canal]
+        df_f_global = df_f_global[df_f_global[col_canal].astype(str) == sel_canal]
 
     # 3. Supervisor / Gerente de Unidad
     opciones_gerente = ["Todos"] + sorted([str(x) for x in df_f[col_gerente].dropna().unique()])
     sel_gerente = st.sidebar.selectbox("Supervisor", opciones_gerente, index=0)
     if sel_gerente != "Todos":
         df_f = df_f[df_f[col_gerente].astype(str) == sel_gerente]
+        df_f_global = df_f_global[df_f_global[col_gerente].astype(str) == sel_gerente]
+
+    # 4. NUEVO: Filtro de Zona
+    opciones_zona = ["Todos"] + sorted([str(x) for x in df_f[col_zona].dropna().unique()])
+    sel_zona = st.sidebar.selectbox("Zona", opciones_zona, index=0)
+    if sel_zona != "Todos":
+        df_f = df_f[df_f[col_zona].astype(str) == sel_zona]
+        df_f_global = df_f_global[df_f_global[col_zona].astype(str) == sel_zona]
 
     # --- CUERPO PRINCIPAL: FILTROS DE AÑO Y MESES ARRIBA ---
     st.subheader("📅 Panel de Control Temporal")
@@ -115,6 +129,51 @@ try:
         kpi1.metric(label=f"Ventas Total ({anio_sel})", value=f"${total_actual:,.0f}")
         kpi2.metric(label=f"Ventas Total ({anio_anterior})", value=f"${total_anterior:,.0f}", delta=f"{crecimiento_global:,.0f}% YoY")
         kpi3.metric(label="Meses Evaluados", value=f"{len(meses_sel)} mes(es)")
+
+        st.markdown("---")
+
+        # --- NUEVO: TABLA RESUMEN FIJA DE TODOS LOS CÓDIGOS UN (Regionales) ---
+        st.subheader("🌐 Resumen General por Código UN (DIBOG, DICAL, etc.)")
+        st.caption("Esta tabla muestra la comparativa de todas las regionales sin importar el filtro de Código UN aplicado en la barra lateral.")
+
+        df_global_actual = df_f_global[(df_f_global[col_anio] == anio_sel) & (df_f_global[col_mes].isin(meses_sel))]
+        df_global_ant = df_f_global[(df_f_global[col_anio] == anio_anterior) & (df_f_global[col_mes].isin(meses_sel))]
+
+        reg_actual = df_global_actual.groupby(col_regional)[col_valor].sum().reset_index()
+        reg_actual.rename(columns={col_valor: f'Venta {anio_sel}'}, inplace=True)
+
+        reg_ant = df_global_ant.groupby(col_regional)[col_valor].sum().reset_index()
+        reg_ant.rename(columns={col_valor: f'Venta {anio_anterior}'}, inplace=True)
+
+        tabla_un_final = pd.merge(reg_actual, reg_ant, on=col_regional, how='outer').fillna(0)
+        tabla_un_final['Variación ($)'] = tabla_un_final[f'Venta {anio_sel}'] - tabla_un_final[f'Venta {anio_anterior}']
+        tabla_un_final['Variación (%)'] = ((tabla_un_final[f'Venta {anio_sel}'] / tabla_un_final[f'Venta {anio_anterior}'].replace(0, 1)) - 1) * 100
+        tabla_un_final = tabla_un_final.sort_values(by=f'Venta {anio_sel}', ascending=False)
+
+        def color_variacion(val):
+            try:
+                if isinstance(val, (int, float)):
+                    if val > 0:
+                        return 'color: #2E7D32; font-weight: bold;'
+                    elif val < 0:
+                        return 'color: #C62828; font-weight: bold;'
+            except:
+                pass
+            return ''
+
+        format_dict_un = {
+            f'Venta {anio_sel}': '${:,.0f}',
+            f'Venta {anio_anterior}': '${:,.0f}',
+            'Variación ($)': '${:,.0f}',
+            'Variación (%)': '{:,.0f}%'
+        }
+
+        tabla_un_estilizada = (
+            tabla_un_final.style
+            .format(format_dict_un)
+            .map(color_variacion, subset=['Variación ($)', 'Variación (%)'])
+        )
+        st.dataframe(tabla_un_estilizada, use_container_width=True)
 
         st.markdown("---")
 
@@ -239,18 +298,6 @@ try:
                 mime="text/csv",
             )
 
-        # Función de estilo condicional robusta para verde (crece) y rojo (decrece)
-        def color_variacion(val):
-            try:
-                if isinstance(val, (int, float)):
-                    if val > 0:
-                        return 'color: #2E7D32; font-weight: bold;'
-                    elif val < 0:
-                        return 'color: #C62828; font-weight: bold;'
-            except:
-                pass
-            return ''
-
         format_dict = {
             f'Venta {anio_sel}': '${:,.0f}',
             f'Venta {anio_anterior}': '${:,.0f}',
@@ -269,7 +316,7 @@ try:
 
         st.markdown("---")
 
-        # --- SECCIÓN: CLIENTES INACTIVOS (Corrección del error de tipo flotante) ---
+        # --- SECCIÓN: CLIENTES INACTIVOS ---
         st.subheader(f"⚠️ Clientes Inactivos (Compraron en {anio_anterior} pero tienen $0 en {anio_sel})")
         st.caption(f"Esta lista muestra a los clientes que registran compras en {anio_anterior} para el período seleccionado, pero cuyas ventas actuales en {anio_sel} están en cero.")
 

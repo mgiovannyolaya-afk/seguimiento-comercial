@@ -5,12 +5,12 @@ import plotly.express as px
 # Configuración de la página
 st.set_page_config(page_title="Seguimiento Pernod General", layout="wide")
 
-# --- CABECERA VISUAL: BANNER DELGADO Y ELEGANTE A LO ANCHO ---
+# --- CABECERA VISUAL: BANNER DELGADO CON BOTELLAS DE LICOR A LO ANCHO ---
 st.markdown(
     """
     <div style="width: 100%; margin-bottom: 15px; overflow: hidden; border-radius: 6px;">
-        <img src="https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?q=80&w=1600&auto=format&fit=crop" 
-             style="width: 100%; max-height: 130px; object-fit: cover; display: block;">
+        <img src="https://images.unsplash.com/photo-1569529465841-dfecdab7503b?q=80&w=1600&auto=format&fit=crop" 
+             style="width: 100%; max-height: 130px; object-fit: cover; object-position: center; display: block;">
     </div>
     """,
     unsafe_allow_html=True

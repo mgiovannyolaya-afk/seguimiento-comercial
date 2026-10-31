@@ -5,15 +5,13 @@ import plotly.express as px
 # Configuración de la página
 st.set_page_config(page_title="Seguimiento Pernod General", layout="wide")
 
-# --- CABECERA COMPACTA CON IMAGEN DE CHIVAS CENTRADA Y TÍTULO ---
-col_img1, col_img2, col_img3 = st.columns([1, 2, 1])
-with col_img2:
-    st.image(
-        "https://images.unsplash.com/photo-1527281400683-1aae777175f8?q=80&w=800&auto=format&fit=crop", 
-        use_container_width=True
-    )
-    st.markdown("<h2 style='text-align: center;'>🥃 Seguimiento Pernod General</h2>", unsafe_allow_html=True)
+# --- CABECERA VISUAL: BANNER HORIZONTAL DE LICORES A LO ANCHO ---
+st.image(
+    "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?q=80&w=1600&auto=format&fit=crop", 
+    use_container_width=True
+)
 
+st.title("🥃 Seguimiento Pernod General")
 st.markdown("---")
 
 @st.cache_data
@@ -41,7 +39,7 @@ try:
     col_canal = detectar_columna(['Tipo de Cliente', 'Tipo cliente', 'Canal', 'Canal de Venta'], 0)
     col_gerente = detectar_columna(['Gerente Zona', 'Gerente Unidad', 'Supervisor', 'Gerente'], 2)
     
-    # Búsqueda estricta para la columna de código de zona (ej. PEB013, PEC002)
+    # Búsqueda estricta para el código de zona (PEB013, PEC002, etc.)
     col_zona = detectar_columna(['Código Zona', 'Codigo Zona', 'Cod Zona', 'Id Zona'], 3)
     
     col_cliente = detectar_columna(['Nombre Cliente', 'Cliente', 'Documento Cliente'], 4)

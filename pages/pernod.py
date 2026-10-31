@@ -5,13 +5,15 @@ import plotly.express as px
 # Configuración de la página
 st.set_page_config(page_title="Seguimiento Pernod General", layout="wide")
 
-# --- CABECERA VISUAL: BANNER ANGOSTO Y ESTILIZADO DE LICORES PRÉMIUM ---
-st.image(
-    "https://images.unsplash.com/photo-1527281400683-1aae777175f8?q=80&w=1600&auto=format&fit=crop", 
-    use_container_width=True
-)
+# --- CABECERA COMPACTA CON IMAGEN DE CHIVAS CENTRADA Y TÍTULO ---
+col_img1, col_img2, col_img3 = st.columns([1, 2, 1])
+with col_img2:
+    st.image(
+        "https://images.unsplash.com/photo-1527281400683-1aae777175f8?q=80&w=800&auto=format&fit=crop", 
+        use_container_width=True
+    )
+    st.markdown("<h2 style='text-align: center;'>🥃 Seguimiento Pernod General</h2>", unsafe_allow_html=True)
 
-st.title("🥃 Seguimiento Pernod General")
 st.markdown("---")
 
 @st.cache_data
@@ -38,7 +40,10 @@ try:
     col_regional = detectar_columna(['Código UN', 'Cod UN', 'Regional', 'Región'], 1)
     col_canal = detectar_columna(['Tipo de Cliente', 'Tipo cliente', 'Canal', 'Canal de Venta'], 0)
     col_gerente = detectar_columna(['Gerente Zona', 'Gerente Unidad', 'Supervisor', 'Gerente'], 2)
-    col_zona = detectar_columna(['Cód Zona', 'Cod Zona', 'Id Zona', 'Zona', 'Subzona'], 3)
+    
+    # Búsqueda estricta para la columna de código de zona (ej. PEB013, PEC002)
+    col_zona = detectar_columna(['Código Zona', 'Codigo Zona', 'Cod Zona', 'Id Zona'], 3)
+    
     col_cliente = detectar_columna(['Nombre Cliente', 'Cliente', 'Documento Cliente'], 4)
     col_anio = detectar_columna(['Año', 'Anio', 'Year'], 5)
     col_mes = detectar_columna(['Mes', 'Month'], 6)
@@ -76,7 +81,7 @@ try:
         df_f = df_f[df_f[col_gerente].astype(str) == sel_gerente]
         df_f_global = df_f_global[df_f_global[col_gerente].astype(str) == sel_gerente]
 
-    # 4. Filtro de Zona (Códigos como PEC001, PEB001, etc.)
+    # 4. Filtro de Código Zona (PEB013, PEC002, etc.)
     opciones_zona = ["Todos"] + sorted([str(x) for x in df_f[col_zona].dropna().unique()])
     sel_zona = st.sidebar.selectbox("Código Zona", opciones_zona, index=0)
     if sel_zona != "Todos":

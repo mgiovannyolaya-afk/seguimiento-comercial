@@ -32,7 +32,7 @@ try:
     col_regional = detectar_columna(['Código UN', 'Cod UN', 'Regional', 'Región'], 1)
     col_canal = detectar_columna(['Tipo de Cliente', 'Tipo cliente', 'Canal', 'Canal de Venta'], 0)
     col_gerente = detectar_columna(['Gerente Zona', 'Gerente Unidad', 'Supervisor', 'Gerente'], 2)
-    col_zona = detectar_columna(['Zona', 'Subzona', 'Area'], 3) # Detección para la columna Zona
+    col_zona = detectar_columna(['Zona', 'Subzona', 'Area'], 3)
     col_cliente = detectar_columna(['Nombre Cliente', 'Cliente', 'Documento Cliente'], 4)
     col_anio = detectar_columna(['Año', 'Anio', 'Year'], 5)
     col_mes = detectar_columna(['Mes', 'Month'], 6)
@@ -51,7 +51,6 @@ try:
     opciones_reg = ["Todos"] + sorted([str(x) for x in df_f[col_regional].dropna().unique()])
     sel_reg = st.sidebar.selectbox("Código UN (Regional)", opciones_reg, index=0)
     
-    # Nota: Guardamos una copia de df_f antes de filtrar por Código UN para la tabla resumen fija
     df_f_global = df_f.copy()
 
     if sel_reg != "Todos":
@@ -71,7 +70,7 @@ try:
         df_f = df_f[df_f[col_gerente].astype(str) == sel_gerente]
         df_f_global = df_f_global[df_f_global[col_gerente].astype(str) == sel_gerente]
 
-    # 4. NUEVO: Filtro de Zona
+    # 4. Filtro de Zona
     opciones_zona = ["Todos"] + sorted([str(x) for x in df_f[col_zona].dropna().unique()])
     sel_zona = st.sidebar.selectbox("Zona", opciones_zona, index=0)
     if sel_zona != "Todos":
@@ -88,7 +87,6 @@ try:
         anio_base = st.selectbox("Selecciona el Año Base:", anios_disp, index=len(anios_disp)-1 if anios_disp else 0)
 
     with col_f2:
-        # Orden cronológico estricto para los meses
         meses_unicos = df_f[col_mes].dropna().unique()
         orden_meses_ref = [
             "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
@@ -132,9 +130,9 @@ try:
 
         st.markdown("---")
 
-        # --- NUEVO: TABLA RESUMEN FIJA DE TODOS LOS CÓDIGOS UN (Regionales) ---
-        st.subheader("🌐 Resumen General por Código UN (DIBOG, DICAL, etc.)")
-        st.caption("Esta tabla muestra la comparativa de todas las regionales sin importar el filtro de Código UN aplicado en la barra lateral.")
+        # --- SECCIÓN VISUAL Y COMPACTA: RESUMEN GENERAL POR UNIDAD DE NEGOCIO ---
+        st.subheader("🌐 Resumen de Variación General por Unidad de Negocio")
+        st.caption("Vista rápida de ventas y crecimiento por regional (independiente del filtro lateral de Código UN).")
 
         df_global_actual = df_f_global[(df_f_global[col_anio] == anio_sel) & (df_f_global[col_mes].isin(meses_sel))]
         df_global_ant = df_f_global[(df_f_global[col_anio] == anio_anterior) & (df_f_global[col_mes].isin(meses_sel))]
@@ -148,32 +146,57 @@ try:
         tabla_un_final = pd.merge(reg_actual, reg_ant, on=col_regional, how='outer').fillna(0)
         tabla_un_final['Variación ($)'] = tabla_un_final[f'Venta {anio_sel}'] - tabla_un_final[f'Venta {anio_anterior}']
         tabla_un_final['Variación (%)'] = ((tabla_un_final[f'Venta {anio_sel}'] / tabla_un_final[f'Venta {anio_anterior}'].replace(0, 1)) - 1) * 100
-        tabla_un_final = tabla_un_final.sort_values(by=f'Venta {anio_sel}', ascending=False)
+        
+        tabla_un_final['Crecimiento_Tipo'] = tabla_un_final['Variación (%)'].apply(lambda x: 'Crecimiento' if x >= 0 else 'Decrecimiento')
 
-        def color_variacion(val):
-            try:
-                if isinstance(val, (int, float)):
-                    if val > 0:
-                        return 'color: #2E7D32; font-weight: bold;'
-                    elif val < 0:
-                        return 'color: #C62828; font-weight: bold;'
-            except:
-                pass
-            return ''
+        col_vis1, col_vis2 = st.columns([1.2, 1])
 
-        format_dict_un = {
-            f'Venta {anio_sel}': '${:,.0f}',
-            f'Venta {anio_anterior}': '${:,.0f}',
-            'Variación ($)': '${:,.0f}',
-            'Variación (%)': '{:,.0f}%'
-        }
+        with col_vis1:
+            fig_un_vis = px.bar(
+                tabla_un_final.sort_values(by='Variación (%)', ascending=True),
+                x='Variación (%)',
+                y=col_regional,
+                orientation='h',
+                color='Crecimiento_Tipo',
+                color_discrete_map={'Crecimiento': '#2E7D32', 'Decrecimiento': '#C62828'},
+                text=tabla_un_final.sort_values(by='Variación (%)', ascending=True)['Variación (%)'].apply(lambda x: f"{x:,.0f}%")
+            )
+            fig_un_vis.update_traces(textposition='outside', hovertemplate='<b>%{y}</b><br>Variación: %{x:,.1f}%<extra></extra>')
+            fig_un_vis.update_layout(
+                xaxis_title="Variación (%)",
+                yaxis_title="",
+                showlegend=False,
+                height=300,
+                margin=dict(l=0, r=0, t=10, b=0)
+            )
+            st.plotly_chart(fig_un_vis, use_container_width=True)
 
-        tabla_un_estilizada = (
-            tabla_un_final.style
-            .format(format_dict_un)
-            .map(color_variacion, subset=['Variación ($)', 'Variación (%)'])
-        )
-        st.dataframe(tabla_un_estilizada, use_container_width=True)
+        with col_vis2:
+            def color_variacion(val):
+                try:
+                    if isinstance(val, (int, float)):
+                        if val > 0:
+                            return 'color: #2E7D32; font-weight: bold;'
+                        elif val < 0:
+                            return 'color: #C62828; font-weight: bold;'
+                except:
+                    pass
+                return ''
+
+            format_dict_un = {
+                f'Venta {anio_sel}': '${:,.0f}',
+                f'Venta {anio_anterior}': '${:,.0f}',
+                'Variación ($)': '${:,.0f}',
+                'Variación (%)': '{:,.0f}%'
+            }
+
+            tabla_un_estilizada = (
+                tabla_un_final.sort_values(by=f'Venta {anio_sel}', ascending=False).style
+                .format(format_dict_un)
+                .map(color_variacion, subset=['Variación ($)', 'Variación (%)'])
+                .hide(subset=['Crecimiento_Tipo'], axis='columns')
+            )
+            st.dataframe(tabla_un_estilizada, use_container_width=True, height=280)
 
         st.markdown("---")
 
@@ -238,7 +261,7 @@ try:
 
         st.markdown("---")
 
-        # --- GRÁFICO DE TENDENCIA MENSUAL (LÍNEAS YoY - ALTURA OPTIMIZADA) ---
+        # --- GRÁFICO DE TENDENCIA MENSUAL (LÍNEAS YoY) ---
         st.subheader(f"📈 Tendencia Mensual de Ventas ({anio_sel} vs {anio_anterior})")
         df_tendencia = df_f[df_f[col_anio].isin([anio_sel, anio_anterior])]
         if not df_tendencia.empty:
@@ -264,7 +287,7 @@ try:
 
         st.markdown("---")
 
-        # --- TABLA COMPARATIVA DE CLIENTES CON ESTILOS CONDICIONALES Y DESCARGA ---
+        # --- TABLA COMPARATIVA DE CLIENTES ---
         st.subheader("📋 Detalle por Cliente (Año Actual vs. Año Anterior)")
 
         col_busq, col_desc = st.columns([3, 1])
@@ -287,7 +310,6 @@ try:
         if busqueda_tabla:
             tabla_final = tabla_final[tabla_final[col_cliente].astype(str).str.contains(busqueda_tabla, case=False, na=False)]
 
-        # Botón de descarga CSV
         with col_desc:
             st.write("") 
             csv_data = tabla_final.to_csv(index=False).encode('utf-8')
@@ -297,6 +319,17 @@ try:
                 file_name=f"detalle_clientes_{anio_sel}.csv",
                 mime="text/csv",
             )
+
+        def color_variacion_cli(val):
+            try:
+                if isinstance(val, (int, float)):
+                    if val > 0:
+                        return 'color: #2E7D32; font-weight: bold;'
+                    elif val < 0:
+                        return 'color: #C62828; font-weight: bold;'
+            except:
+                pass
+            return ''
 
         format_dict = {
             f'Venta {anio_sel}': '${:,.0f}',
@@ -308,7 +341,7 @@ try:
         tabla_estilizada = (
             tabla_final.style
             .format(format_dict)
-            .map(color_variacion, subset=['Variación ($)', 'Variación (%)'])
+            .map(color_variacion_cli, subset=['Variación ($)', 'Variación (%)'])
         )
 
         st.caption(f"Comparativa activa para: **{', '.join(map(str, meses_sel))}** ({anio_sel} vs. {anio_anterior})")

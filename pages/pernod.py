@@ -3,20 +3,10 @@ import pandas as pd
 import plotly.express as px
 
 # Configuración de la página
-st.set_page_config(page_title="Seguimiento Pernod General", layout="wide")
+st.set_page_config(page_title="SEGUIMIENTO PERNOD RICARD", layout="wide")
 
-# --- LOGOTIPO OFICIAL DE PERNOD RICARD (A LO ANCHO Y TAMAÑO IDEAL) ---
-st.markdown(
-    """
-    <div style="width: 100%; background-color: #ffffff; margin-bottom: 15px; text-align: center;">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Pernod_Ricard_logo.svg/1024px-Pernod_Ricard_logo.svg.png" 
-             style="width: 100%; max-width: 650px; max-height: 120px; object-fit: contain; display: inline-block;">
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-st.title("🥃 Seguimiento Pernod General")
+# Título llamativo con emojis de botella y copa, todo en mayúsculas
+st.title("🍾 SEGUIMIENTO PERNOD RICARD 🥂")
 st.markdown("---")
 
 @st.cache_data

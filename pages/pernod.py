@@ -5,11 +5,10 @@ import plotly.express as px
 # Configuración de la página
 st.set_page_config(page_title="Seguimiento Pernod General", layout="wide")
 
-# --- CABECERA VISUAL CON IMAGEN ESTILO LICORERÍA PRÉMIUM Y TÍTULO ---
+# --- CABECERA VISUAL: BANNER ANGOSTO Y ESTILIZADO DE LICORES PRÉMIUM ---
 st.image(
-    "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?q=80&w=1600&auto=format&fit=crop", 
-    use_container_width=True, 
-    caption="Pernod Ricard - Control Comercial y Distribución"
+    "https://images.unsplash.com/photo-1527281400683-1aae777175f8?q=80&w=1600&auto=format&fit=crop", 
+    use_container_width=True
 )
 
 st.title("🥃 Seguimiento Pernod General")
@@ -137,7 +136,7 @@ try:
 
         st.markdown("---")
 
-        # --- SECCIÓN VISUAL Y COMPACTA: RESUMEN GENERAL POR UNIDAD DE NEGOCIO ---
+        # --- SECCIÓN VISUAL Y COMPACTA: RESUMEN DE VARIACIÓN GENERAL POR UNIDAD DE NEGOCIO ---
         st.subheader("🌐 Resumen de Variación General por Unidad de Negocio")
         st.caption("Vista rápida de ventas y crecimiento por regional (independiente del filtro lateral de Código UN).")
 

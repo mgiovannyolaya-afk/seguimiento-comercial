@@ -5,11 +5,21 @@ import plotly.express as px
 # Configuración de la página
 st.set_page_config(page_title="SEGUIMIENTO PERNOD RICARD", layout="wide")
 
-# Estilo CSS para evitar que las métricas largas se recorten con "..."
+# Estilo CSS para evitar que las métricas largas se recorten con "..." y dar formato a los bloques informativos
 st.markdown("""
     <style>
         [data-testid="stMetricValue"] {
             font-size: 1.4rem !important;
+        }
+        .custom-submetric {
+            background-color: #f8f9fa;
+            border-left: 4px solid #0066cc;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-top: -10px;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            color: #31333F;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -426,17 +436,35 @@ try:
                 total_clientes_ant = df_ant_sup[df_ant_sup[col_valor] > 1][col_cliente].nunique()
                 var_clientes_yoy = total_clientes_gt1 - total_clientes_ant
 
-                # Ventas año anterior
+                # Ventas año anterior y su variación porcentual y en dinero
                 total_venta_ant = df_ant_sup[col_valor].sum()
+                var_venta_monto = total_venta_real - total_venta_ant
+                var_venta_porc = ((total_venta_real / total_venta_ant) - 1) * 100 if total_venta_ant > 0 else 0
 
                 total_pedidos_act = int(tabla_cumplimiento['Pedidos'].sum())
                 total_pedidos_ant = int(tabla_cumplimiento['Pedidos Ant'].sum())
                 var_pedidos_total = total_pedidos_act - total_pedidos_ant
 
-                # Métricas superiores claras y limpias (enfocadas en Cumplimiento de Meta)
+                # Métricas superiores organizadas
                 k1, k2, k3 = st.columns(3)
                 k1.metric(label="Presupuesto Total (Meta)", value=f"${total_ppto:,.0f}")
-                k2.metric(label="Venta Real Acumulada", value=f"${total_venta_real:,.0f}", delta=f"{cumplimiento_global_ppto:,.1f}% Cumplimiento")
+                
+                with k2:
+                    st.metric(
+                        label="Venta Real Acumulada", 
+                        value=f"${total_venta_real:,.0f}", 
+                        delta=f"{cumplimiento_global_ppto:,.1f}% Cumplimiento"
+                    )
+                    # Bloque clarito debajo de la venta real con año pasado y variación
+                    signo_var = "+" if var_venta_monto >= 0 else ""
+                    st.markdown(
+                        f"""<div class="custom-submetric">
+                            <b>Año Anterior ({anio_ant_p}):</b> ${total_venta_ant:,.0f}<br>
+                            <b>Variación YoY:</b> {signo_var}${var_venta_monto:,.0f} ({signo_var}{var_venta_porc:,.1f}%)
+                        </div>""", 
+                        unsafe_allow_html=True
+                    )
+
                 k3.metric(label="Zonas Evaluadas", value=f"{len(tabla_cumplimiento)}")
 
                 k4, k5 = st.columns(2)

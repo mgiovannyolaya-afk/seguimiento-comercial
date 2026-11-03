@@ -260,8 +260,8 @@ try:
     # PESTAÑA 2: ANÁLISIS DE REFERENCIAS (YoY)
     # ==========================================
     with tab2:
-        st.subheader("📦 Análisis Comparativo de Referencias (YoY: 2025 vs 2026)")
-        st.markdown("Compara el crecimiento o decrecimiento de cada referencia evaluando el año actual frente al año anterior.")
+        st.subheader("📦 Análisis Avanzado de Referencias (YoY: 2025 vs 2026)")
+        st.markdown("Consulta arriba las referencias más y menos vendidas, y abajo su evolución de crecimiento o decrecimiento frente al año anterior.")
 
         col_ref_f1, col_ref_f2, col_ref_f3 = st.columns([1, 2, 1])
         with col_ref_f1:
@@ -290,14 +290,52 @@ try:
             if not tabla_ref_comp.empty:
                 st.markdown("---")
                 
-                # Gráficas de mayor crecimiento y mayor decrecimiento en referencias
-                col_m1, col_m2 = st.columns(2)
+                # --------------------------------------------------
+                # 1. ARRIBA: MÁS VENDIDAS Y MENOS VENDIDAS
+                # --------------------------------------------------
+                st.markdown(f"### 🏆 Top {top_n} Referencias Más y Menos Vendidas ({anio_ref_sel})")
+                col_mv1, col_mv2 = st.columns(2)
+
+                df_top_mas = tabla_ref_comp.sort_values(by=f'Venta {anio_ref_sel}', ascending=False).head(top_n)
+                df_top_menos = tabla_ref_comp[tabla_ref_comp[f'Venta {anio_ref_sel}'] > 0].sort_values(by=f'Venta {anio_ref_sel}', ascending=True).head(top_n)
+
+                with col_mv1:
+                    st.markdown(f"**🔥 Más Vendidas**")
+                    df_top_mas['Texto_Moneda'] = df_top_mas[f'Venta {anio_ref_sel}'].apply(lambda x: f"${x:,.0f}")
+                    fig_mas = px.bar(
+                        df_top_mas.sort_values(by=f'Venta {anio_ref_sel}', ascending=True),
+                        x=f'Venta {anio_ref_sel}', y=col_referencia, orientation='h',
+                        text='Texto_Moneda', color=f'Venta {anio_ref_sel}', color_continuous_scale='Greens'
+                    )
+                    fig_mas.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>')
+                    fig_mas.update_layout(showlegend=False, xaxis_title=f"Venta Total ($ {anio_ref_sel})", yaxis_title="Referencia / Producto", height=320)
+                    st.plotly_chart(fig_mas, use_container_width=True)
+
+                with col_mv2:
+                    st.markdown(f"**🧊 Menos Vendidas (Bajo Movimiento)**")
+                    df_top_menos['Texto_Moneda'] = df_top_menos[f'Venta {anio_ref_sel}'].apply(lambda x: f"${x:,.0f}")
+                    fig_menos = px.bar(
+                        df_top_menos.sort_values(by=f'Venta {anio_ref_sel}', ascending=True),
+                        x=f'Venta {anio_ref_sel}', y=col_referencia, orientation='h',
+                        text='Texto_Moneda', color=f'Venta {anio_ref_sel}', color_continuous_scale='Blues'
+                    )
+                    fig_menos.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>')
+                    fig_menos.update_layout(showlegend=False, xaxis_title=f"Venta Total ($ {anio_ref_sel})", yaxis_title="Referencia / Producto", height=320)
+                    st.plotly_chart(fig_menos, use_container_width=True)
+
+                st.markdown("---")
+
+                # --------------------------------------------------
+                # 2. ABAJITO: GRÁFICAS SI CRECEN O DECRECEN
+                # --------------------------------------------------
+                st.markdown(f"### 📈 Dinámica de Crecimiento y Decrecimiento YoY ({anio_ref_sel} vs {anio_ref_ant})")
+                col_g_inf1, col_g_inf2 = st.columns(2)
 
                 df_top_crece = tabla_ref_comp.sort_values(by='Variación ($)', ascending=False).head(top_n)
                 df_top_decrece = tabla_ref_comp.sort_values(by='Variación ($)', ascending=True).head(top_n)
 
-                with col_m1:
-                    st.markdown(f"### 📈 Top {top_n} Referencias con Mayor Crecimiento ($)")
+                with col_g_inf1:
+                    st.markdown(f"**📈 Top {top_n} Referencias con Mayor Crecimiento ($)**")
                     df_top_crece['Texto_Var'] = df_top_crece['Variación ($)'].apply(lambda x: f"${x:,.0f}")
                     fig_crece = px.bar(
                         df_top_crece.sort_values(by='Variación ($)', ascending=True),
@@ -305,11 +343,11 @@ try:
                         text='Texto_Var', color='Variación ($)', color_continuous_scale='Greens'
                     )
                     fig_crece.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Variación: $%{x:,.0f}<extra></extra>')
-                    fig_crece.update_layout(showlegend=False, xaxis_title="Crecimiento en Dinero ($)", yaxis_title="Referencia / Producto")
+                    fig_crece.update_layout(showlegend=False, xaxis_title="Crecimiento en Dinero ($)", yaxis_title="Referencia / Producto", height=320)
                     st.plotly_chart(fig_crece, use_container_width=True)
 
-                with col_m2:
-                    st.markdown(f"### 📉 Top {top_n} Referencias con Mayor Decrecimiento ($)")
+                with col_g_inf2:
+                    st.markdown(f"**📉 Top {top_n} Referencias con Mayor Decrecimiento ($)**")
                     df_top_decrece['Texto_Var'] = df_top_decrece['Variación ($)'].apply(lambda x: f"${x:,.0f}")
                     fig_decrece = px.bar(
                         df_top_decrece.sort_values(by='Variación ($)', ascending=True),
@@ -317,11 +355,11 @@ try:
                         text='Texto_Var', color='Variación ($)', color_continuous_scale='Reds_r'
                     )
                     fig_decrece.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Variación: $%{x:,.0f}<extra></extra>')
-                    fig_decrece.update_layout(showlegend=False, xaxis_title="Decrecimiento en Dinero ($)", yaxis_title="Referencia / Producto")
+                    fig_decrece.update_layout(showlegend=False, xaxis_title="Decrecimiento en Dinero ($)", yaxis_title="Referencia / Producto", height=320)
                     st.plotly_chart(fig_decrece, use_container_width=True)
 
                 st.markdown("---")
-                st.subheader(f"📋 Tabla Comparativa de Referencias ({anio_ref_sel} vs {anio_ref_ant})")
+                st.subheader(f"📋 Tabla Comparativa Completa de Referencias")
                 
                 col_b_ref, col_d_ref = st.columns([3, 1])
                 with col_b_ref:

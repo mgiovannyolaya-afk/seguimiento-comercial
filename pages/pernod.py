@@ -367,7 +367,6 @@ try:
                 anio_p = int(anio_ppto_sel)
                 anio_ant_p = anio_p - 1
 
-                # Extracción directa y segura de datos del año actual y anterior respetando los meses filtrados
                 df_ppto_ventas_actual = df[(df[col_anio] == anio_p) & (df[col_mes].isin(meses_ppto_sel))]
                 df_ppto_ventas_ant = df[(df[col_anio] == anio_ant_p) & (df[col_mes].isin(meses_ppto_sel))]
 
@@ -384,7 +383,6 @@ try:
                 if sel_gerente != "Todos":
                     df_ppto_filtrado = df_ppto_filtrado[df_ppto_filtrado[p_gerente_ppto].astype(str) == sel_gerente]
 
-                # Aplicamos también los filtros laterales generales a las ventas si aplican
                 if sel_reg != "Todos":
                     df_ppto_ventas_actual = df_ppto_ventas_actual[df_ppto_ventas_actual[col_regional].astype(str) == sel_reg]
                     df_ppto_ventas_ant = df_ppto_ventas_ant[df_ppto_ventas_ant[col_regional].astype(str) == sel_reg]
@@ -392,13 +390,11 @@ try:
                     df_ppto_ventas_actual = df_ppto_ventas_actual[df_ppto_ventas_actual[col_canal].astype(str) == sel_canal]
                     df_ppto_ventas_ant = df_ppto_ventas_ant[df_ppto_ventas_ant[col_canal].astype(str) == sel_canal]
 
-                # Agrupaciones independientes por zona
                 df_ventas_zona = df_ppto_ventas_actual.groupby(col_zona)[col_valor].sum().reset_index().rename(columns={col_valor: 'Venta'})
                 df_cli_gt1 = df_ppto_ventas_actual[df_ppto_ventas_actual[col_valor] > 1].groupby(col_zona)[col_cliente].nunique().reset_index().rename(columns={col_cliente: 'Impactos'})
                 df_pedidos_act = df_ppto_ventas_actual.groupby(col_zona).size().reset_index(name='Pedidos')
                 df_pedidos_ant = df_ppto_ventas_ant.groupby(col_zona).size().reset_index(name='Pedidos Ant')
 
-                # Limpieza de llaves de zona para asegurar un cruce perfecto
                 df_ppto_filtrado[p_zona] = df_ppto_filtrado[p_zona].astype(str).str.strip()
                 df_ventas_zona[col_zona] = df_ventas_zona[col_zona].astype(str).str.strip()
                 df_cli_gt1[col_zona] = df_cli_gt1[col_zona].astype(str).str.strip()
@@ -408,25 +404,24 @@ try:
                 df_ppto_filtrado[p_ppto] = pd.to_numeric(df_ppto_filtrado[p_ppto], errors='coerce').fillna(0)
                 df_ppto_filtrado[p_maestra] = pd.to_numeric(df_ppto_filtrado[p_maestra], errors='coerce').fillna(0)
 
-                # Consolidación final en la tabla de cumplimiento
                 tabla_cumplimiento = pd.merge(df_ppto_filtrado, df_ventas_zona, left_on=p_zona, right_on=col_zona, how='left').fillna(0)
                 tabla_cumplimiento = pd.merge(tabla_cumplimiento, df_cli_gt1, on=col_zona, how='left').fillna(0)
                 tabla_cumplimiento = pd.merge(tabla_cumplimiento, df_pedidos_act, on=col_zona, how='left').fillna(0)
                 tabla_cumplimiento = pd.merge(tabla_cumplimiento, df_pedidos_ant, on=col_zona, how='left').fillna(0)
 
-                # Cálculos de porcentajes y variaciones de pedidos
                 tabla_cumplimiento['% Cumplimiento Venta'] = (tabla_cumplimiento['Venta'] / tabla_cumplimiento[p_ppto].replace(0, 1)) * 100
                 tabla_cumplimiento['% Cumplimiento Impactos'] = (tabla_cumplimiento['Impactos'] / tabla_cumplimiento[p_maestra].replace(0, 1)) * 100
                 tabla_cumplimiento['Variación Pedidos'] = tabla_cumplimiento['Pedidos'] - tabla_cumplimiento['Pedidos Ant']
 
-                # Totales superiores globales
                 total_ppto = tabla_cumplimiento[p_ppto].sum()
                 total_venta_real = tabla_cumplimiento['Venta'].sum()
                 cumplimiento_global_ppto = (total_venta_real / total_ppto) * 100 if total_ppto > 0 else 0
 
-                total_clientes_gt1 = df_ppto_ventas_actual[df_ppto_ventas_actual[col_valor] > 1][col_cliente].nunique()
-                total_pedidos_act = len(df_ppto_ventas_actual)
-                total_pedidos_ant = len(df_ppto_ventas_ant)
+                # Corrección clave: El indicador superior de clientes impactados ahora suma exactamente los impactos filtrados de la tabla resultante
+                total_clientes_gt1 = int(tabla_cumplimiento['Impactos'].sum())
+                
+                total_pedidos_act = int(tabla_cumplimiento['Pedidos'].sum())
+                total_pedidos_ant = int(tabla_cumplimiento['Pedidos Ant'].sum())
                 var_pedidos_total = total_pedidos_act - total_pedidos_ant
 
                 k1, k2, k3 = st.columns(3)
@@ -441,7 +436,6 @@ try:
                 st.markdown("---")
                 st.subheader("📋 Detalle de Ejecución por Zona")
 
-                # Estructura ordenada y nombres cortos solicitados
                 columnas_deseadas = {
                     p_un: 'Código UN',
                     p_zona: 'Código Zona',

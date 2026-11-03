@@ -83,7 +83,27 @@ try:
         df_f_global = df_f_global[df_f_global[col_zona].astype(str) == sel_zona]
 
     # --- CREACIÓN DE PESTAÑAS PRINCIPALES ---
-    tab1, tab2 = st.tabs(["📊 Dashboard General & Clientes", "📦 Análisis de Referencias (Top & Bajo Movimiento)"])
+    tab1, tab2 = st.tabs(["📊 Dashboard General & Clientes", "📦 Análisis de Referencias (YoY 2025 vs 2026)"])
+
+    # Función auxiliar para ordenar meses de forma cronológica
+    orden_meses_ref = [
+        "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
+        "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+    ]
+    def obtener_peso_mes(m):
+        m_lower = str(m).strip().lower()
+        for idx, ref in enumerate(orden_meses_ref):
+            if ref in m_lower:
+                return idx
+        return 999
+
+    def color_variacion(val):
+        try:
+            if isinstance(val, (int, float)):
+                if val > 0: return 'color: #2E7D32; font-weight: bold;'
+                elif val < 0: return 'color: #C62828; font-weight: bold;'
+        except: pass
+        return ''
 
     # ==========================================
     # PESTAÑA 1: DASHBOARD COMERCIAL GENERAL
@@ -99,24 +119,8 @@ try:
 
         with col_f2:
             meses_unicos = df_f[col_mes].dropna().unique()
-            orden_meses_ref = [
-                "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
-                "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
-            ]
-            
-            def obtener_peso_mes(m):
-                m_lower = str(m).strip().lower()
-                for idx, ref in enumerate(orden_meses_ref):
-                    if ref in m_lower:
-                        return idx
-                return 999
-
             meses_disp = sorted(list(meses_unicos), key=obtener_peso_mes)
-
-            if hasattr(st, "segmented_control"):
-                meses_sel = st.segmented_control("Selecciona los meses activos:", options=meses_disp, default=meses_disp, selection_mode="multi", key="meses_tab1")
-            else:
-                meses_sel = st.multiselect("Selecciona los meses activos:", options=meses_disp, default=list(meses_disp), key="meses_tab1_multi")
+            meses_sel = st.multiselect("Selecciona los meses activos:", options=meses_disp, default=list(meses_disp), key="meses_tab1_multi")
 
         st.markdown("---")
 
@@ -145,11 +149,8 @@ try:
             df_global_actual = df_f_global[(df_f_global[col_anio] == anio_sel) & (df_f_global[col_mes].isin(meses_sel))]
             df_global_ant = df_f_global[(df_f_global[col_anio] == anio_anterior) & (df_f_global[col_mes].isin(meses_sel))]
 
-            reg_actual = df_global_actual.groupby(col_regional)[col_valor].sum().reset_index()
-            reg_actual.rename(columns={col_valor: f'Venta {anio_sel}'}, inplace=True)
-
-            reg_ant = df_global_ant.groupby(col_regional)[col_valor].sum().reset_index()
-            reg_ant.rename(columns={col_valor: f'Venta {anio_anterior}'}, inplace=True)
+            reg_actual = df_global_actual.groupby(col_regional)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_sel}'})
+            reg_ant = df_global_ant.groupby(col_regional)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_anterior}'})
 
             tabla_un_final = pd.merge(reg_actual, reg_ant, on=col_regional, how='outer').fillna(0)
             tabla_un_final['Variación ($)'] = tabla_un_final[f'Venta {anio_sel}'] - tabla_un_final[f'Venta {anio_anterior}']
@@ -173,14 +174,6 @@ try:
                 st.plotly_chart(fig_un_vis, use_container_width=True)
 
             with col_vis2:
-                def color_variacion(val):
-                    try:
-                        if isinstance(val, (int, float)):
-                            if val > 0: return 'color: #2E7D32; font-weight: bold;'
-                            elif val < 0: return 'color: #C62828; font-weight: bold;'
-                    except: pass
-                    return ''
-
                 format_dict_un = {f'Venta {anio_sel}': '${:,.0f}', f'Venta {anio_anterior}': '${:,.0f}', 'Variación ($)': '${:,.0f}', 'Variación (%)': '{:,.0f}%'}
                 tabla_un_estilizada = (
                     tabla_un_final.sort_values(by=f'Venta {anio_sel}', ascending=False).style
@@ -240,97 +233,19 @@ try:
             format_dict = {f'Venta {anio_sel}': '${:,.0f}', f'Venta {anio_anterior}': '${:,.0f}', 'Variación ($)': '${:,.0f}', 'Variación (%)': '{:,.0f}%'}
             st.dataframe(tabla_final.style.format(format_dict).map(color_variacion, subset=['Variación ($)', 'Variación (%)']), use_container_width=True)
 
-        else:
-            st.warning("⚠️ Selecciona un Año Base y al menos un Mes.")
+            st.markdown("---")
 
-    # ==========================================
-    # PESTAÑA 2: ANÁLISIS DE REFERENCIAS (TOP & BAJO MOVIMIENTO)
-    # ==========================================
-    with tab2:
-        st.subheader("📦 Análisis Avanzado de Referencias y Productos")
-        st.markdown("Consulta rápida de las referencias más vendidas (Top comerciales) y las de menor rotación para optimización de inventarios y portafolio.")
+            # Clientes Inactivos (Compraron en anterior y tienen 0 en actual)
+            st.subheader(f"⚠️ Clientes Inactivos (Compraron en {anio_anterior} pero tienen $0 en {anio_sel})")
+            st.caption(f"Clientes con compras registradas en el período seleccionado de {anio_anterior} pero sin ventas en {anio_sel}.")
 
-        col_ref_f1, col_ref_f2, col_ref_f3 = st.columns([1, 2, 1])
-        with col_ref_f1:
-            anios_ref_disp = sorted(df_f[col_anio].dropna().unique())
-            anio_ref_base = st.selectbox("Año a evaluar:", anios_ref_disp, index=len(anios_ref_disp)-1 if anios_ref_disp else 0, key="anio_tab2")
-        with col_ref_f2:
-            meses_ref_disp = sorted(list(df_f[col_mes].dropna().unique()), key=obtener_peso_mes)
-            meses_ref_sel = st.multiselect("Meses a evaluar:", options=meses_ref_disp, default=list(meses_ref_disp), key="meses_tab2")
-        with col_ref_f3:
-            top_n = st.selectbox("Cantidad a mostrar en Top:", [5, 10, 15, 20], index=1, key="top_n_sel")
+            ventas_act_num = df_actual.groupby(col_cliente)[col_valor].sum()
+            ventas_ant_num = df_ant.groupby(col_cliente)[col_valor].sum()
+            
+            clientes_cero = set(ventas_ant_num[ventas_ant_num > 0].index) - set(ventas_act_num[ventas_act_num > 0].index)
+            df_inactivos_final = df_ant[df_ant[col_cliente].isin(clientes_cero)].groupby(col_cliente)[col_valor].sum().reset_index()
+            df_inactivos_final.rename(columns={col_valor: f'Venta Histórica {anio_anterior}'}, inplace=True)
+            df_inactivos_final = df_inactivos_final.sort_values(by=f'Venta Histórica {anio_anterior}', ascending=False)
 
-        if anio_ref_base and meses_ref_sel:
-            df_ref_eval = df_f[(df_f[col_anio] == int(anio_ref_base)) & (df_f[col_mes].isin(meses_ref_sel))]
-
-            if not df_ref_eval.empty:
-                # Agrupación por referencia
-                df_ref_group = df_ref_eval.groupby(col_referencia)[col_valor].sum().reset_index()
-                df_ref_group = df_ref_group.sort_values(by=col_valor, ascending=False)
-
-                # Top más vendidas
-                df_top_mas = df_ref_group.head(top_n)
-                # Menos vendidas (con venta mayor a 0 o todas)
-                df_top_menos = df_ref_group[df_ref_group[col_valor] > 0].tail(top_n).sort_values(by=col_valor, ascending=True)
-
-                st.markdown("---")
-                
-                # Visuales en dos columnas
-                col_m1, col_m2 = st.columns(2)
-
-                with col_m1:
-                    st.markdown(f"### 🔥 Top {top_n} Referencias Más Vendidas")
-                    df_top_mas['Texto_Moneda'] = df_top_mas[col_valor].apply(lambda x: f"${x:,.0f}")
-                    fig_mas = px.bar(
-                        df_top_mas, x=col_valor, y=col_referencia, orientation='h',
-                        text='Texto_Moneda', color=col_valor, color_continuous_scale='Greens'
-                    )
-                    fig_mas.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>')
-                    fig_mas.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False, xaxis_title="Venta Total ($)", yaxis_title="Referencia / Producto")
-                    st.plotly_chart(fig_mas, use_container_width=True)
-
-                with col_m2:
-                    st.markdown(f"### 🧊 Top {top_n} Referencias Menos Vendidas (Bajo Movimiento)")
-                    df_top_menos['Texto_Moneda'] = df_top_menos[col_valor].apply(lambda x: f"${x:,.0f}")
-                    fig_menos = px.bar(
-                        df_top_menos, x=col_valor, y=col_referencia, orientation='h',
-                        text='Texto_Moneda', color=col_valor, color_continuous_scale='Reds_r'
-                    )
-                    fig_menos.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>')
-                    fig_menos.update_layout(yaxis={'categoryorder':'total descending'}, showlegend=False, xaxis_title="Venta Total ($)", yaxis_title="Referencia / Producto")
-                    st.plotly_chart(fig_menos, use_container_width=True)
-
-                st.markdown("---")
-                st.subheader("📋 Consolidado Completo de Referencias")
-                
-                # Buscador y descarga
-                col_b_ref, col_d_ref = st.columns([3, 1])
-                with col_b_ref:
-                    busq_ref = st.text_input("🔍 Buscar referencia específica:", "", key="busq_referencia_txt")
-                
-                df_tabla_ref = df_ref_group.copy()
-                df_tabla_ref.rename(columns={col_referencia: "Referencia / Producto", col_valor: f"Venta Total ({anio_ref_base})"}, inplace=True)
-                
-                if busq_ref:
-                    df_tabla_ref = df_tabla_ref[df_tabla_ref["Referencia / Producto"].astype(str).str.contains(busq_ref, case=False, na=False)]
-
-                with col_d_ref:
-                    st.write("")
-                    st.download_button(
-                        label="📥 Descargar Referencias CSV",
-                        data=df_tabla_ref.to_csv(index=False).encode('utf-8'),
-                        file_name=f"analisis_referencias_{anio_ref_base}.csv",
-                        mime="text/csv",
-                        key="dl_ref_csv"
-                    )
-
-                df_tabla_ref[f"Venta Total ({anio_ref_base})"] = df_tabla_ref[f"Venta Total ({anio_ref_base})"].apply(lambda x: f"${x:,.0f}")
-                st.dataframe(df_tabla_ref, use_container_width=True, height=350)
-
-            else:
-                st.info("No hay datos de referencias para los filtros seleccionados.")
-        else:
-            st.warning("⚠️ Selecciona el año y meses para el análisis de referencias.")
-
-except Exception as e:
-    st.error(f"Ocurrió un error al procesar la aplicación: {e}")
+            if not df_inactivos_final.empty:
+                df_inactivos_final[f'Venta Histórica {anio_anterior}'] = df_inactivos_final[f'Venta Histórica {anio_anterior}'].apply

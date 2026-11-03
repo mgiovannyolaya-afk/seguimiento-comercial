@@ -5,21 +5,11 @@ import plotly.express as px
 # Configuración de la página
 st.set_page_config(page_title="SEGUIMIENTO PERNOD RICARD", layout="wide")
 
-# Estilo CSS para evitar que las métricas largas se recorten con "..." y dar formato a los bloques informativos
+# Estilo CSS para evitar que las métricas largas se recorten con "..."
 st.markdown("""
     <style>
         [data-testid="stMetricValue"] {
             font-size: 1.4rem !important;
-        }
-        .custom-submetric {
-            background-color: #f8f9fa;
-            border-left: 4px solid #0066cc;
-            padding: 8px 12px;
-            border-radius: 4px;
-            margin-top: -10px;
-            margin-bottom: 15px;
-            font-size: 0.9rem;
-            color: #31333F;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -91,7 +81,7 @@ try:
     sel_gerente = st.sidebar.selectbox("Supervisor", opciones_gerente, index=0)
     if sel_gerente != "Todos":
         df_f = df_f[df_f[col_gerente].astype(str) == sel_gerente]
-        df_f_global = df_f_global[df_f_global[col_gerente].astype(str) == sel_gerente]
+        df_f_global = df_f_global[df_f_global[df_f_global[col_gerente].astype(str) == sel_gerente]
 
     opciones_zona = ["Todos"] + sorted([str(x) for x in df_f[col_zona].dropna().unique()])
     sel_zona = st.sidebar.selectbox("Código Zona", opciones_zona, index=0)
@@ -401,6 +391,7 @@ try:
                     df_ppto_ventas_ant = df_ppto_ventas_ant[df_ppto_ventas_ant[col_canal].astype(str) == sel_canal]
 
                 df_ventas_zona = df_ppto_ventas_actual.groupby(col_zona)[col_valor].sum().reset_index().rename(columns={col_valor: 'Venta'})
+box_cliente = detectar_columna(['Nombre Cliente', 'Cliente', 'Documento Cliente'], 4)
                 df_cli_gt1 = df_ppto_ventas_actual[df_ppto_ventas_actual[col_valor] > 1].groupby(col_zona)[col_cliente].nunique().reset_index().rename(columns={col_cliente: 'Impactos'})
                 df_pedidos_act = df_ppto_ventas_actual.groupby(col_zona).size().reset_index(name='Pedidos')
                 df_pedidos_ant = df_ppto_ventas_ant.groupby(col_zona).size().reset_index(name='Pedidos Ant')
@@ -445,25 +436,16 @@ try:
                 total_pedidos_ant = int(tabla_cumplimiento['Pedidos Ant'].sum())
                 var_pedidos_total = total_pedidos_act - total_pedidos_ant
 
-                # Métricas superiores organizadas
+                # Métricas superiores organizadas de forma nativa y limpia
                 k1, k2, k3 = st.columns(3)
                 k1.metric(label="Presupuesto Total (Meta)", value=f"${total_ppto:,.0f}")
                 
-                with k2:
-                    st.metric(
-                        label="Venta Real Acumulada", 
-                        value=f"${total_venta_real:,.0f}", 
-                        delta=f"{cumplimiento_global_ppto:,.1f}% Cumplimiento"
-                    )
-                    # Bloque clarito debajo de la venta real con año pasado y variación
-                    signo_var = "+" if var_venta_monto >= 0 else ""
-                    st.markdown(
-                        f"""<div class="custom-submetric">
-                            <b>Año Anterior ({anio_ant_p}):</b> ${total_venta_ant:,.0f}<br>
-                            <b>Variación YoY:</b> {signo_var}${var_venta_monto:,.0f} ({signo_var}{var_venta_porc:,.1f}%)
-                        </div>""", 
-                        unsafe_allow_html=True
-                    )
+                signo_var = "+" if var_venta_monto >= 0 else ""
+                k2.metric(
+                    label="Venta Real Acumulada", 
+                    value=f"${total_venta_real:,.0f}", 
+                    delta=f"{cumplimiento_global_ppto:,.1f}% Cumpl. | Ant: ${total_venta_ant:,.0f} ({signo_var}{var_venta_porc:,.1f}%)"
+                )
 
                 k3.metric(label="Zonas Evaluadas", value=f"{len(tabla_cumplimiento)}")
 

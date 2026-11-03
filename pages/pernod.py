@@ -47,7 +47,7 @@ try:
     df[col_valor] = pd.to_numeric(df[col_valor], errors='coerce').fillna(0)
     df[col_anio] = pd.to_numeric(df[col_anio], errors='coerce')
 
-    # --- BARRA LATERAL: FILTROS PRINCIPALES ---
+    # --- BARRA LATERAL: FILTROS GLOBALES ---
     st.sidebar.header("🎯 Filtros Globales")
 
     df_f = df.copy()
@@ -248,4 +248,117 @@ try:
             df_inactivos_final = df_inactivos_final.sort_values(by=f'Venta Histórica {anio_anterior}', ascending=False)
 
             if not df_inactivos_final.empty:
-                df_inactivos_final[f'Venta Histórica {anio_anterior}'] = df_inactivos_final[f'Venta Histórica {anio_anterior}'].apply
+                df_inactivos_final[f'Venta Histórica {anio_anterior}'] = df_inactivos_final[f'Venta Histórica {anio_anterior}'].apply(lambda x: f"${x:,.0f}")
+                st.dataframe(df_inactivos_final, use_container_width=True)
+            else:
+                st.success(f"🎉 ¡Excelente noticia! No hay clientes inactivos para los filtros y meses seleccionados entre {anio_anterior} y {anio_sel}.")
+
+        else:
+            st.warning("⚠️ Selecciona un Año Base y al menos un Mes.")
+
+    # ==========================================
+    # PESTAÑA 2: ANÁLISIS DE REFERENCIAS (YoY)
+    # ==========================================
+    with tab2:
+        st.subheader("📦 Análisis Comparativo de Referencias (YoY: 2025 vs 2026)")
+        st.markdown("Compara el crecimiento o decrecimiento de cada referencia evaluando el año actual frente al año anterior.")
+
+        col_ref_f1, col_ref_f2, col_ref_f3 = st.columns([1, 2, 1])
+        with col_ref_f1:
+            anios_ref_disp = sorted(df_f[col_anio].dropna().unique())
+            anio_ref_base = st.selectbox("Año Actual:", anios_ref_disp, index=len(anios_ref_disp)-1 if anios_ref_disp else 0, key="anio_tab2")
+        with col_ref_f2:
+            meses_ref_disp = sorted(list(df_f[col_mes].dropna().unique()), key=obtener_peso_mes)
+            meses_ref_sel = st.multiselect("Meses a evaluar:", options=meses_ref_disp, default=list(meses_ref_disp), key="meses_tab2")
+        with col_ref_f3:
+            top_n = st.selectbox("Cantidad en Top:", [5, 10, 15, 20], index=1, key="top_n_sel")
+
+        if anio_ref_base and meses_ref_sel:
+            anio_ref_sel = int(anio_ref_base)
+            anio_ref_ant = anio_ref_sel - 1
+
+            df_ref_actual = df_f[(df_f[col_anio] == anio_ref_sel) & (df_f[col_mes].isin(meses_ref_sel))]
+            df_ref_ant = df_f[(df_f[col_anio] == anio_ref_ant) & (df_f[col_mes].isin(meses_ref_sel))]
+
+            ref_act = df_ref_actual.groupby(col_referencia)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_ref_sel}'})
+            ref_ant = df_ref_ant.groupby(col_referencia)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_ref_ant}'})
+
+            tabla_ref_comp = pd.merge(ref_act, ref_ant, on=col_referencia, how='outer').fillna(0)
+            tabla_ref_comp['Variación ($)'] = tabla_ref_comp[f'Venta {anio_ref_sel}'] - tabla_ref_comp[f'Venta {anio_ref_ant}']
+            tabla_ref_comp['Variación (%)'] = ((tabla_ref_comp[f'Venta {anio_ref_sel}'] / tabla_ref_comp[f'Venta {anio_ref_ant}'].replace(0, 1)) - 1) * 100
+
+            if not tabla_ref_comp.empty:
+                st.markdown("---")
+                
+                # Gráficas de mayor crecimiento y mayor decrecimiento en referencias
+                col_m1, col_m2 = st.columns(2)
+
+                df_top_crece = tabla_ref_comp.sort_values(by='Variación ($)', ascending=False).head(top_n)
+                df_top_decrece = tabla_ref_comp.sort_values(by='Variación ($)', ascending=True).head(top_n)
+
+                with col_m1:
+                    st.markdown(f"### 📈 Top {top_n} Referencias con Mayor Crecimiento ($)")
+                    df_top_crece['Texto_Var'] = df_top_crece['Variación ($)'].apply(lambda x: f"${x:,.0f}")
+                    fig_crece = px.bar(
+                        df_top_crece.sort_values(by='Variación ($)', ascending=True),
+                        x='Variación ($)', y=col_referencia, orientation='h',
+                        text='Texto_Var', color='Variación ($)', color_continuous_scale='Greens'
+                    )
+                    fig_crece.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Variación: $%{x:,.0f}<extra></extra>')
+                    fig_crece.update_layout(showlegend=False, xaxis_title="Crecimiento en Dinero ($)", yaxis_title="Referencia / Producto")
+                    st.plotly_chart(fig_crece, use_container_width=True)
+
+                with col_m2:
+                    st.markdown(f"### 📉 Top {top_n} Referencias con Mayor Decrecimiento ($)")
+                    df_top_decrece['Texto_Var'] = df_top_decrece['Variación ($)'].apply(lambda x: f"${x:,.0f}")
+                    fig_decrece = px.bar(
+                        df_top_decrece.sort_values(by='Variación ($)', ascending=True),
+                        x='Variación ($)', y=col_referencia, orientation='h',
+                        text='Texto_Var', color='Variación ($)', color_continuous_scale='Reds_r'
+                    )
+                    fig_decrece.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Variación: $%{x:,.0f}<extra></extra>')
+                    fig_decrece.update_layout(showlegend=False, xaxis_title="Decrecimiento en Dinero ($)", yaxis_title="Referencia / Producto")
+                    st.plotly_chart(fig_decrece, use_container_width=True)
+
+                st.markdown("---")
+                st.subheader(f"📋 Tabla Comparativa de Referencias ({anio_ref_sel} vs {anio_ref_ant})")
+                
+                col_b_ref, col_d_ref = st.columns([3, 1])
+                with col_b_ref:
+                    busq_ref = st.text_input("🔍 Buscar referencia:", "", key="busq_referencia_txt")
+                
+                tabla_ref_final = tabla_ref_comp.sort_values(by=f'Venta {anio_ref_sel}', ascending=False)
+                if busq_ref:
+                    tabla_ref_final = tabla_ref_final[tabla_ref_final[col_referencia].astype(str).str.contains(busq_ref, case=False, na=False)]
+
+                with col_d_ref:
+                    st.write("")
+                    st.download_button(
+                        label="📥 Descargar CSV",
+                        data=tabla_ref_final.to_csv(index=False).encode('utf-8'),
+                        file_name=f"comparativo_referencias_{anio_ref_sel}_vs_{anio_ref_ant}.csv",
+                        mime="text/csv",
+                        key="dl_ref_csv"
+                    )
+
+                format_dict_ref = {
+                    f'Venta {anio_ref_sel}': '${:,.0f}',
+                    f'Venta {anio_ref_ant}': '${:,.0f}',
+                    'Variación ($)': '${:,.0f}',
+                    'Variación (%)': '{:,.0f}%'
+                }
+                
+                tabla_ref_estilizada = (
+                    tabla_ref_final.style
+                    .format(format_dict_ref)
+                    .map(color_variacion, subset=['Variación ($)', 'Variación (%)'])
+                )
+                st.dataframe(tabla_ref_estilizada, use_container_width=True, height=350)
+
+            else:
+                st.info("No hay datos de referencias para los períodos seleccionados.")
+        else:
+            st.warning("⚠️ Selecciona el año y meses para el análisis comparativo de referencias.")
+
+except Exception as e:
+    st.error(f"Ocurrió un error al procesar la aplicación: {e}")

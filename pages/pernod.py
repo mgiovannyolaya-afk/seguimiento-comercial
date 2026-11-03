@@ -417,21 +417,32 @@ try:
                 total_venta_real = tabla_cumplimiento['Venta'].sum()
                 cumplimiento_global_ppto = (total_venta_real / total_ppto) * 100 if total_ppto > 0 else 0
 
-                # Corrección clave: El indicador superior de clientes impactados ahora suma exactamente los impactos filtrados de la tabla resultante
-                total_clientes_gt1 = int(tabla_cumplimiento['Impactos'].sum())
-                
+                # Clientes únicos globales actuales y anteriores filtrados por la zona/supervisor activo
+                zonas_filtradas = tabla_cumplimiento[p_zona].astype(str).unique()
+                df_act_sup = df_ppto_ventas_actual[df_ppto_ventas_actual[col_zona].astype(str).isin(zonas_filtradas)]
+                df_ant_sup = df_ppto_ventas_ant[df_ppto_ventas_ant[col_zona].astype(str).isin(zonas_filtradas)]
+
+                total_clientes_gt1 = df_act_sup[df_act_sup[col_valor] > 1][col_cliente].nunique()
+                total_clientes_ant = df_ant_sup[df_ant_sup[col_valor] > 1][col_cliente].nunique()
+                var_clientes_yoy = total_clientes_gt1 - total_clientes_ant
+
+                # Ventas año anterior para métrica superior
+                total_venta_ant = df_ant_sup[col_valor].sum()
+                var_venta_yoy = ((total_venta_real / total_venta_ant) - 1) * 100 if total_venta_ant > 0 else 0
+
                 total_pedidos_act = int(tabla_cumplimiento['Pedidos'].sum())
                 total_pedidos_ant = int(tabla_cumplimiento['Pedidos Ant'].sum())
                 var_pedidos_total = total_pedidos_act - total_pedidos_ant
 
+                # Métricas superiores con comparativa YoY completa
                 k1, k2, k3 = st.columns(3)
                 k1.metric(label="Presupuesto Total (Meta)", value=f"${total_ppto:,.0f}")
-                k2.metric(label="Venta Real Acumulada", value=f"${total_venta_real:,.0f}", delta=f"{cumplimiento_global_ppto:,.1f}% Cumpl.")
+                k2.metric(label="Venta Real Acumulada", value=f"${total_venta_real:,.0f}", delta=f"{cumplimiento_global_ppto:,.1f}% Cumpl. ({var_venta_yoy:+.1f}% YoY)")
                 k3.metric(label="Zonas Evaluadas", value=f"{len(tabla_cumplimiento)}")
 
                 k4, k5 = st.columns(2)
-                k4.metric(label="Clientes Impactados (> $1)", value=f"{total_clientes_gt1:,}")
-                k5.metric(label="Cantidad de Pedidos", value=f"{total_pedidos_act:,}", delta=f"{var_pedidos_total:+d} YoY")
+                k4.metric(label="Clientes Impactados (> $1)", value=f"{total_clientes_gt1:,}", delta=f"{var_clientes_yoy:+d} YoY (Ant: {total_clientes_ant:,})")
+                k5.metric(label="Cantidad de Pedidos", value=f"{total_pedidos_act:,}", delta=f"{var_pedidos_total:+d} YoY (Ant: {total_pedidos_ant:,})")
 
                 st.markdown("---")
                 st.subheader("📋 Detalle de Ejecución por Zona")

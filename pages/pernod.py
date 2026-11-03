@@ -340,53 +340,84 @@ try:
     # PESTAÑA 3: PRESUPUESTO & ZONAS (PPTO)
     # ==========================================
     with tab3:
-        st.subheader("🎯 Cumplimiento de Presupuesto por Zona y Gerente (PPTO)")
-        st.markdown("Cruzando la venta real con los presupuestos y metas de la hoja maestra.")
+        st.subheader("🎯 Cumplimiento de Presupuesto por Zona (PPTO)")
+        st.markdown("Filtra por mes y zona para evaluar el cumplimiento real de la cuota.")
 
         if not df_ppto.empty:
-            cols_ppto = df_ppto.columns.tolist()
-            p_zona = next((c for c in cols_ppto if 'zona' in str(c).lower()), cols_ppto[2])
-            p_ppto = next((c for c in cols_ppto if 'presupuesto' in str(c).lower() or 'ppto' in str(c).lower()), cols_ppto[3])
-            p_maestra = next((c for c in cols_ppto if 'maestra' in str(c).lower()), cols_ppto[4] if len(cols_ppto)>4 else cols_ppto[3])
-            p_gerente = next((c for c in cols_ppto if 'gerente' in str(c).lower() or 'supervisor' in str(c).lower()), cols_ppto[1])
-
-            df_ventas_zona = df_f.groupby(col_zona)[col_valor].sum().reset_index().rename(columns={col_valor: 'Venta Real'})
-
-            df_ppto[p_zona] = df_ppto[p_zona].astype(str).str.strip()
-            df_ventas_zona[col_zona] = df_ventas_zona[col_zona].astype(str).str.strip()
-            df_ppto[p_ppto] = pd.to_numeric(df_ppto[p_ppto], errors='coerce').fillna(0)
-            df_ppto[p_maestra] = pd.to_numeric(df_ppto[p_maestra], errors='coerce').fillna(0)
-
-            tabla_cumplimiento = pd.merge(df_ppto, df_ventas_zona, left_on=p_zona, right_on=col_zona, how='left').fillna(0)
-            
-            tabla_cumplimiento['% Cumplimiento'] = (tabla_cumplimiento['Venta Real'] / tabla_cumplimiento[p_ppto].replace(0, 1)) * 100
-            tabla_cumplimiento['Diferencia ($)'] = tabla_cumplimiento['Venta Real'] - tabla_cumplimiento[p_ppto]
-
-            total_ppto = tabla_cumplimiento[p_ppto].sum()
-            total_venta_real = tabla_cumplimiento['Venta Real'].sum()
-            cumplimiento_global_ppto = (total_venta_real / total_ppto) * 100 if total_ppto > 0 else 0
-
-            kp1, kp2, kp3 = st.columns(3)
-            kp1.metric(label="Presupuesto Total (Meta)", value=f"${total_ppto:,.0f}")
-            kp2.metric(label="Venta Real Acumulada", value=f"${total_venta_real:,.0f}", delta=f"{cumplimiento_global_ppto:,.1f}% Cumplimiento")
-            kp3.metric(label="Zonas Evaluadas", value=f"{len(tabla_cumplimiento)} zonas")
+            # Filtro específico de mes para PPTO
+            col_ppto_f1, col_ppto_f2 = st.columns([1, 3])
+            with col_ppto_f1:
+                anios_ppto_disp = sorted(df_f[col_anio].dropna().unique())
+                anio_ppto_sel = st.selectbox("Año Presupuesto:", anios_ppto_disp, index=len(anios_ppto_disp)-1 if anios_ppto_disp else 0, key="anio_ppto_sel")
+            with col_ppto_f2:
+                meses_ppto_disp = sorted(list(df_f[col_mes].dropna().unique()), key=obtener_peso_mes)
+                meses_ppto_sel = st.multiselect("Meses a evaluar en PPTO:", options=meses_ppto_disp, default=list(meses_ppto_disp), key="meses_ppto_multi")
 
             st.markdown("---")
-            st.subheader("📋 Detalle de Ejecución por Zona y Gerente")
 
-            format_dict_ppto = {
-                p_ppto: '${:,.0f}',
-                'Venta Real': '${:,.0f}',
-                'Diferencia ($)': '${:,.0f}',
-                '% Cumplimiento': '{:,.1f}%'
-            }
+            if anio_ppto_sel and meses_ppto_sel:
+                # Filtrar ventas según año, meses y filtros laterales activos (zona, regional, canal, etc.)
+                df_ppto_ventas = df_f[(df_f[col_anio] == int(anio_ppto_sel)) & (df_f[col_mes].isin(meses_ppto_sel))]
 
-            tabla_ppto_estilizada = (
-                tabla_cumplimiento.sort_values(by='% Cumplimiento', ascending=False).style
-                .format(format_dict_ppto)
-                .map(color_variacion, subset=['% Cumplimiento', 'Diferencia ($)'])
-            )
-            st.dataframe(tabla_ppto_estilizada, use_container_width=True, height=380)
+                cols_ppto = df_ppto.columns.tolist()
+                p_zona = next((c for c in cols_ppto if 'zona' in str(c).lower()), cols_ppto[2])
+                p_ppto = next((c for c in cols_ppto if 'presupuesto' in str(c).lower() or 'ppto' in str(c).lower()), cols_ppto[3])
+                p_maestra = next((c for c in cols_ppto if 'maestra' in str(c).lower()), cols_ppto[4] if len(cols_ppto)>4 else cols_ppto[3])
+                
+                # Si en el filtro lateral hay una zona seleccionada, filtramos también la hoja PPTO
+                df_ppto_filtrado = df_ppto.copy()
+                if sel_zona != "Todos":
+                    df_ppto_filtrado = df_ppto_filtrado[df_ppto_filtrado[p_zona].astype(str) == sel_zona]
+
+                df_ventas_zona = df_ppto_ventas.groupby(col_zona)[col_valor].sum().reset_index().rename(columns={col_valor: 'Venta Real'})
+
+                df_ppto_filtrado[p_zona] = df_ppto_filtrado[p_zona].astype(str).str.strip()
+                df_ventas_zona[col_zona] = df_ventas_zona[col_zona].astype(str).str.strip()
+                df_ppto_filtrado[p_ppto] = pd.to_numeric(df_ppto_filtrado[p_ppto], errors='coerce').fillna(0)
+                df_ppto_filtrado[p_maestra] = pd.to_numeric(df_ppto_filtrado[p_maestra], errors='coerce').fillna(0)
+
+                tabla_cumplimiento = pd.merge(df_ppto_filtrado, df_ventas_zona, left_on=p_zona, right_on=col_zona, how='left').fillna(0)
+                
+                tabla_cumplimiento['% Cumplimiento'] = (tabla_cumplimiento['Venta Real'] / tabla_cumplimiento[p_ppto].replace(0, 1)) * 100
+                tabla_cumplimiento['Diferencia ($)'] = tabla_cumplimiento['Venta Real'] - tabla_cumplimiento[p_ppto]
+
+                total_ppto = tabla_cumplimiento[p_ppto].sum()
+                total_venta_real = tabla_cumplimiento['Venta Real'].sum()
+                cumplimiento_global_ppto = (total_venta_real / total_ppto) * 100 if total_ppto > 0 else 0
+
+                # Métricas adicionales solicitadas: Clientes impactados con venta > 1 y Cantidad de Pedidos
+                clientes_impactados_gt1 = df_ppto_ventas[df_ppto_ventas[col_valor] > 1][col_cliente].nunique()
+                cantidad_pedidos = len(df_ppto_ventas)
+
+                kp1, kp2, kp3, kp4, kp5 = st.columns(5)
+                kp1.metric(label="Presupuesto Total (Meta)", value=f"${total_ppto:,.0f}")
+                kp2.metric(label="Venta Real Acumulada", value=f"${total_venta_real:,.0f}", delta=f"{cumplimiento_global_ppto:,.1f}% Cumpl.")
+                kp3.metric(label="Zonas Evaluadas", value=f"{len(tabla_cumplimiento)}")
+                kp4.metric(label="Clientes Impactados (> $1)", value=f"{clientes_impactados_gt1:,}")
+                kp5.metric(label="Cantidad de Pedidos", value=f"{cantidad_pedidos:,}")
+
+                st.markdown("---")
+                st.subheader("📋 Detalle de Ejecución por Zona")
+
+                # Eliminamos la columna de Nombre Gerente si existe en la tabla para no mostrarla
+                cols_a_ocultar = ['Nombre Gerente', 'Gerente', 'Supervisor']
+                tabla_mostrar = tabla_cumplimiento.drop(columns=[c for c in cols_a_ocultar if c in tabla_cumplimiento.columns])
+
+                format_dict_ppto = {
+                    p_ppto: '${:,.0f}',
+                    'Venta Real': '${:,.0f}',
+                    'Diferencia ($)': '${:,.0f}',
+                    '% Cumplimiento': '{:,.1f}%'
+                }
+
+                tabla_ppto_estilizada = (
+                    tabla_mostrar.sort_values(by='% Cumplimiento', ascending=False).style
+                    .format(format_dict_ppto)
+                    .map(color_variacion, subset=['% Cumplimiento', 'Diferencia ($)'])
+                )
+                st.dataframe(tabla_ppto_estilizada, use_container_width=True, height=380)
+            else:
+                st.warning("⚠️ Selecciona el año y al menos un mes para evaluar el presupuesto.")
 
         else:
             st.warning("⚠️ No se encontró la hoja 'PPTO' en tu archivo Excel. Asegúrate de que tenga ese nombre exacto.")

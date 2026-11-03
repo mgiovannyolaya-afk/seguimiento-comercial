@@ -426,18 +426,17 @@ try:
                 total_clientes_ant = df_ant_sup[df_ant_sup[col_valor] > 1][col_cliente].nunique()
                 var_clientes_yoy = total_clientes_gt1 - total_clientes_ant
 
-                # Ventas año anterior para métrica superior
+                # Ventas año anterior
                 total_venta_ant = df_ant_sup[col_valor].sum()
-                var_venta_yoy = ((total_venta_real / total_venta_ant) - 1) * 100 if total_venta_ant > 0 else 0
 
                 total_pedidos_act = int(tabla_cumplimiento['Pedidos'].sum())
                 total_pedidos_ant = int(tabla_cumplimiento['Pedidos Ant'].sum())
                 var_pedidos_total = total_pedidos_act - total_pedidos_ant
 
-                # Métricas superiores con comparativa YoY completa
+                # Métricas superiores claras y limpias (enfocadas en Cumplimiento de Meta)
                 k1, k2, k3 = st.columns(3)
                 k1.metric(label="Presupuesto Total (Meta)", value=f"${total_ppto:,.0f}")
-                k2.metric(label="Venta Real Acumulada", value=f"${total_venta_real:,.0f}", delta=f"{cumplimiento_global_ppto:,.1f}% Cumpl. ({var_venta_yoy:+.1f}% YoY)")
+                k2.metric(label="Venta Real Acumulada", value=f"${total_venta_real:,.0f}", delta=f"{cumplimiento_global_ppto:,.1f}% Cumplimiento")
                 k3.metric(label="Zonas Evaluadas", value=f"{len(tabla_cumplimiento)}")
 
                 k4, k5 = st.columns(2)

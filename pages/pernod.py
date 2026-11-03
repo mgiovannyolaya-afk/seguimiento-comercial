@@ -11,13 +11,20 @@ st.markdown("---")
 
 @st.cache_data
 def cargar_datos():
-    return pd.read_excel("BV PERNOD TODA.xlsb", engine="pyxlsb")
+    # Cargamos la base de ventas y la hoja de presupuesto (PPTO)
+    xls_path = "BV PERNOD TODA.xlsb"
+    df_ventas = pd.read_excel(xls_path, sheet_name=0, engine="pyxlsb")
+    try:
+        df_ppto = pd.read_excel(xls_path, sheet_name="PPTO", engine="pyxlsb")
+    except:
+        df_ppto = pd.DataFrame() # Por si el nombre de la hoja varía ligeramente
+    return df_ventas, df_ppto
 
 try:
-    df = cargar_datos()
+    df, df_ppto = cargar_datos()
     columnas = df.columns.tolist()
 
-    # Detección automática inteligente de columnas
+    # Detección automática inteligente de columnas en ventas
     def detectar_columna(palabras_clave, fallback_idx=0):
         for pk in palabras_clave:
             for col in columnas:
@@ -29,53 +36,42 @@ try:
                     return col
         return columnas[fallback_idx] if fallback_idx < len(columnas) else columnas[0]
 
-    # Asignación automática de columnas
     col_regional = detectar_columna(['Código UN', 'Cod UN', 'Regional', 'Región'], 1)
     col_canal = detectar_columna(['Tipo de Cliente', 'Tipo cliente', 'Canal', 'Canal de Venta'], 0)
     col_gerente = detectar_columna(['Gerente Zona', 'Gerente Unidad', 'Supervisor', 'Gerente'], 2)
     col_zona = detectar_columna(['Código Zona', 'Codigo Zona', 'Cod Zona', 'Id Zona'], 3)
     col_cliente = detectar_columna(['Nombre Cliente', 'Cliente', 'Documento Cliente'], 4)
-    
-    # Detección específica para referencias / productos / artículos
     col_referencia = detectar_columna(['Referencia', 'Artículo', 'Articulo', 'SKU', 'Producto', 'Item', 'Descripción Item'], 5)
-    
     col_anio = detectar_columna(['Año', 'Anio', 'Year'], 6)
     col_mes = detectar_columna(['Mes', 'Month'], 7)
     col_valor = detectar_columna(['Ventas Det', 'Venta', 'Valor', 'Total'], 8)
 
-    # Asegurar tipo numérico limpio en la columna de valor global
+    # Limpieza de datos numéricos
     df[col_valor] = pd.to_numeric(df[col_valor], errors='coerce').fillna(0)
     df[col_anio] = pd.to_numeric(df[col_anio], errors='coerce')
 
     # --- BARRA LATERAL: FILTROS GLOBALES ---
     st.sidebar.header("🎯 Filtros Globales")
-
     df_f = df.copy()
 
-    # 1. Código UN (Regional)
     opciones_reg = ["Todos"] + sorted([str(x) for x in df_f[col_regional].dropna().unique()])
     sel_reg = st.sidebar.selectbox("Código UN (Regional)", opciones_reg, index=0)
-    
     df_f_global = df_f.copy()
-
     if sel_reg != "Todos":
         df_f = df_f[df_f[col_regional].astype(str) == sel_reg]
 
-    # 2. Canal / Tipo de Cliente
     opciones_canal = ["Todos"] + sorted([str(x) for x in df_f[col_canal].dropna().unique()])
     sel_canal = st.sidebar.selectbox("Canal", opciones_canal, index=0)
     if sel_canal != "Todos":
         df_f = df_f[df_f[col_canal].astype(str) == sel_canal]
         df_f_global = df_f_global[df_f_global[col_canal].astype(str) == sel_canal]
 
-    # 3. Supervisor / Gerente de Unidad
     opciones_gerente = ["Todos"] + sorted([str(x) for x in df_f[col_gerente].dropna().unique()])
     sel_gerente = st.sidebar.selectbox("Supervisor", opciones_gerente, index=0)
     if sel_gerente != "Todos":
         df_f = df_f[df_f[col_gerente].astype(str) == sel_gerente]
         df_f_global = df_f_global[df_f_global[col_gerente].astype(str) == sel_gerente]
 
-    # 4. Filtro de Código Zona
     opciones_zona = ["Todos"] + sorted([str(x) for x in df_f[col_zona].dropna().unique()])
     sel_zona = st.sidebar.selectbox("Código Zona", opciones_zona, index=0)
     if sel_zona != "Todos":
@@ -83,9 +79,12 @@ try:
         df_f_global = df_f_global[df_f_global[col_zona].astype(str) == sel_zona]
 
     # --- CREACIÓN DE PESTAÑAS PRINCIPALES ---
-    tab1, tab2 = st.tabs(["📊 Dashboard General & Clientes", "📦 Análisis de Referencias (YoY 2025 vs 2026)"])
+    tab1, tab2, tab3 = st.tabs([
+        "📊 Dashboard General & Clientes", 
+        "📦 Análisis de Referencias (YoY)", 
+        "🎯 Presupuesto & Zonas (PPTO)"
+    ])
 
-    # Función auxiliar para ordenar meses de forma cronológica
     orden_meses_ref = [
         "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
         "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
@@ -110,7 +109,6 @@ try:
     # ==========================================
     with tab1:
         st.subheader("📅 Panel de Control Temporal")
-        
         col_f1, col_f2 = st.columns([1, 3])
         
         with col_f1:
@@ -141,10 +139,7 @@ try:
             kpi3.metric(label="Meses Evaluados", value=f"{len(meses_sel)} mes(es)")
 
             st.markdown("---")
-
-            # Resumen de Variación General por Unidad de Negocio
             st.subheader("🌐 Resumen de Variación General por Unidad de Negocio")
-            st.caption("Vista rápida de ventas y crecimiento por regional (independiente del filtro lateral de Código UN).")
 
             df_global_actual = df_f_global[(df_f_global[col_anio] == anio_sel) & (df_f_global[col_mes].isin(meses_sel))]
             df_global_ant = df_f_global[(df_f_global[col_anio] == anio_anterior) & (df_f_global[col_mes].isin(meses_sel))]
@@ -158,15 +153,11 @@ try:
             tabla_un_final['Crecimiento_Tipo'] = tabla_un_final['Variación (%)'].apply(lambda x: 'Crecimiento' if x >= 0 else 'Decrecimiento')
 
             col_vis1, col_vis2 = st.columns([1.2, 1])
-
             with col_vis1:
                 fig_un_vis = px.bar(
                     tabla_un_final.sort_values(by='Variación (%)', ascending=True),
-                    x='Variación (%)',
-                    y=col_regional,
-                    orientation='h',
-                    color='Crecimiento_Tipo',
-                    color_discrete_map={'Crecimiento': '#2E7D32', 'Decrecimiento': '#C62828'},
+                    x='Variación (%)', y=col_regional, orientation='h',
+                    color='Crecimiento_Tipo', color_discrete_map={'Crecimiento': '#2E7D32', 'Decrecimiento': '#C62828'},
                     text=tabla_un_final.sort_values(by='Variación (%)', ascending=True)['Variación (%)'].apply(lambda x: f"{x:,.0f}%")
                 )
                 fig_un_vis.update_traces(textposition='outside', hovertemplate='<b>%{y}</b><br>Variación: %{x:,.1f}%<extra></extra>')
@@ -184,8 +175,6 @@ try:
                 st.dataframe(tabla_un_estilizada, use_container_width=True, height=280)
 
             st.markdown("---")
-
-            # Gráficos Regional y Top Clientes
             col_g1, col_g2 = st.columns(2)
             with col_g1:
                 st.subheader(f"📊 Ventas por Regional ({anio_sel})")
@@ -210,8 +199,6 @@ try:
                 else: st.info("Sin datos.")
 
             st.markdown("---")
-
-            # Detalle por Cliente
             st.subheader("📋 Detalle por Cliente (Año Actual vs. Año Anterior)")
             col_busq, col_desc = st.columns([3, 1])
             with col_busq: busqueda_tabla = st.text_input("🔍 Buscar cliente:", "", key="busq_cli_tab1")
@@ -234,14 +221,9 @@ try:
             st.dataframe(tabla_final.style.format(format_dict).map(color_variacion, subset=['Variación ($)', 'Variación (%)']), use_container_width=True)
 
             st.markdown("---")
-
-            # Clientes Inactivos (Compraron en anterior y tienen 0 en actual)
             st.subheader(f"⚠️ Clientes Inactivos (Compraron en {anio_anterior} pero tienen $0 en {anio_sel})")
-            st.caption(f"Clientes con compras registradas en el período seleccionado de {anio_anterior} pero sin ventas en {anio_sel}.")
-
             ventas_act_num = df_actual.groupby(col_cliente)[col_valor].sum()
             ventas_ant_num = df_ant.groupby(col_cliente)[col_valor].sum()
-            
             clientes_cero = set(ventas_ant_num[ventas_ant_num > 0].index) - set(ventas_act_num[ventas_act_num > 0].index)
             df_inactivos_final = df_ant[df_ant[col_cliente].isin(clientes_cero)].groupby(col_cliente)[col_valor].sum().reset_index()
             df_inactivos_final.rename(columns={col_valor: f'Venta Histórica {anio_anterior}'}, inplace=True)
@@ -261,8 +243,6 @@ try:
     # ==========================================
     with tab2:
         st.subheader("📦 Análisis Avanzado de Referencias (YoY: 2025 vs 2026)")
-        st.markdown("Consulta arriba las referencias más y menos vendidas, y abajo su evolución de crecimiento o decrecimiento frente al año anterior.")
-
         col_ref_f1, col_ref_f2, col_ref_f3 = st.columns([1, 2, 1])
         with col_ref_f1:
             anios_ref_disp = sorted(df_f[col_anio].dropna().unique())
@@ -289,10 +269,6 @@ try:
 
             if not tabla_ref_comp.empty:
                 st.markdown("---")
-                
-                # --------------------------------------------------
-                # 1. ARRIBA: MÁS VENDIDAS Y MENOS VENDIDAS
-                # --------------------------------------------------
                 st.markdown(f"### 🏆 Top {top_n} Referencias Más y Menos Vendidas ({anio_ref_sel})")
                 col_mv1, col_mv2 = st.columns(2)
 
@@ -302,11 +278,7 @@ try:
                 with col_mv1:
                     st.markdown(f"**🔥 Más Vendidas**")
                     df_top_mas['Texto_Moneda'] = df_top_mas[f'Venta {anio_ref_sel}'].apply(lambda x: f"${x:,.0f}")
-                    fig_mas = px.bar(
-                        df_top_mas.sort_values(by=f'Venta {anio_ref_sel}', ascending=True),
-                        x=f'Venta {anio_ref_sel}', y=col_referencia, orientation='h',
-                        text='Texto_Moneda', color=f'Venta {anio_ref_sel}', color_continuous_scale='Greens'
-                    )
+                    fig_mas = px.bar(df_top_mas.sort_values(by=f'Venta {anio_ref_sel}', ascending=True), x=f'Venta {anio_ref_sel}', y=col_referencia, orientation='h', text='Texto_Moneda', color=f'Venta {anio_ref_sel}', color_continuous_scale='Greens')
                     fig_mas.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>')
                     fig_mas.update_layout(showlegend=False, xaxis_title=f"Venta Total ($ {anio_ref_sel})", yaxis_title="Referencia / Producto", height=320)
                     st.plotly_chart(fig_mas, use_container_width=True)
@@ -314,34 +286,21 @@ try:
                 with col_mv2:
                     st.markdown(f"**🧊 Menos Vendidas (Bajo Movimiento)**")
                     df_top_menos['Texto_Moneda'] = df_top_menos[f'Venta {anio_ref_sel}'].apply(lambda x: f"${x:,.0f}")
-                    fig_menos = px.bar(
-                        df_top_menos.sort_values(by=f'Venta {anio_ref_sel}', ascending=True),
-                        x=f'Venta {anio_ref_sel}', y=col_referencia, orientation='h',
-                        text='Texto_Moneda', color=f'Venta {anio_ref_sel}', color_continuous_scale='Blues'
-                    )
+                    fig_menos = px.bar(df_top_menos.sort_values(by=f'Venta {anio_ref_sel}', ascending=True), x=f'Venta {anio_ref_sel}', y=col_referencia, orientation='h', text='Texto_Moneda', color=f'Venta {anio_ref_sel}', color_continuous_scale='Blues')
                     fig_menos.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>')
                     fig_menos.update_layout(showlegend=False, xaxis_title=f"Venta Total ($ {anio_ref_sel})", yaxis_title="Referencia / Producto", height=320)
                     st.plotly_chart(fig_menos, use_container_width=True)
 
                 st.markdown("---")
-
-                # --------------------------------------------------
-                # 2. ABAJITO: GRÁFICAS SI CRECEN O DECRECEN
-                # --------------------------------------------------
-                st.markdown(f"### 📈 Dinámica de Crecimiento y Decrecimiento YoY ({anio_ref_sel} vs {anio_ref_ant})")
+                st.markdown(f"### 📈 Dinámica de Crecimiento y Decrecimiento YoY")
                 col_g_inf1, col_g_inf2 = st.columns(2)
-
                 df_top_crece = tabla_ref_comp.sort_values(by='Variación ($)', ascending=False).head(top_n)
                 df_top_decrece = tabla_ref_comp.sort_values(by='Variación ($)', ascending=True).head(top_n)
 
                 with col_g_inf1:
                     st.markdown(f"**📈 Top {top_n} Referencias con Mayor Crecimiento ($)**")
                     df_top_crece['Texto_Var'] = df_top_crece['Variación ($)'].apply(lambda x: f"${x:,.0f}")
-                    fig_crece = px.bar(
-                        df_top_crece.sort_values(by='Variación ($)', ascending=True),
-                        x='Variación ($)', y=col_referencia, orientation='h',
-                        text='Texto_Var', color='Variación ($)', color_continuous_scale='Greens'
-                    )
+                    fig_crece = px.bar(df_top_crece.sort_values(by='Variación ($)', ascending=True), x='Variación ($)', y=col_referencia, orientation='h', text='Texto_Var', color='Variación ($)', color_continuous_scale='Greens')
                     fig_crece.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Variación: $%{x:,.0f}<extra></extra>')
                     fig_crece.update_layout(showlegend=False, xaxis_title="Crecimiento en Dinero ($)", yaxis_title="Referencia / Producto", height=320)
                     st.plotly_chart(fig_crece, use_container_width=True)
@@ -349,21 +308,15 @@ try:
                 with col_g_inf2:
                     st.markdown(f"**📉 Top {top_n} Referencias con Mayor Decrecimiento ($)**")
                     df_top_decrece['Texto_Var'] = df_top_decrece['Variación ($)'].apply(lambda x: f"${x:,.0f}")
-                    fig_decrece = px.bar(
-                        df_top_decrece.sort_values(by='Variación ($)', ascending=True),
-                        x='Variación ($)', y=col_referencia, orientation='h',
-                        text='Texto_Var', color='Variación ($)', color_continuous_scale='Reds_r'
-                    )
+                    fig_decrece = px.bar(df_top_decrece.sort_values(by='Variación ($)', ascending=True), x='Variación ($)', y=col_referencia, orientation='h', text='Texto_Var', color='Variación ($)', color_continuous_scale='Reds_r')
                     fig_decrece.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Variación: $%{x:,.0f}<extra></extra>')
                     fig_decrece.update_layout(showlegend=False, xaxis_title="Decrecimiento en Dinero ($)", yaxis_title="Referencia / Producto", height=320)
                     st.plotly_chart(fig_decrece, use_container_width=True)
 
                 st.markdown("---")
-                st.subheader(f"📋 Tabla Comparativa Completa de Referencias")
-                
+                st.subheader("📋 Tabla Comparativa Completa de Referencias")
                 col_b_ref, col_d_ref = st.columns([3, 1])
-                with col_b_ref:
-                    busq_ref = st.text_input("🔍 Buscar referencia:", "", key="busq_referencia_txt")
+                with col_b_ref: busq_ref = st.text_input("🔍 Buscar referencia:", "", key="busq_referencia_txt")
                 
                 tabla_ref_final = tabla_ref_comp.sort_values(by=f'Venta {anio_ref_sel}', ascending=False)
                 if busq_ref:
@@ -371,32 +324,70 @@ try:
 
                 with col_d_ref:
                     st.write("")
-                    st.download_button(
-                        label="📥 Descargar CSV",
-                        data=tabla_ref_final.to_csv(index=False).encode('utf-8'),
-                        file_name=f"comparativo_referencias_{anio_ref_sel}_vs_{anio_ref_ant}.csv",
-                        mime="text/csv",
-                        key="dl_ref_csv"
-                    )
+                    st.download_button(label="📥 Descargar CSV", data=tabla_ref_final.to_csv(index=False).encode('utf-8'), file_name=f"comparativo_referencias_{anio_ref_sel}_vs_{anio_ref_ant}.csv", mime="text/csv", key="dl_ref_csv")
 
-                format_dict_ref = {
-                    f'Venta {anio_ref_sel}': '${:,.0f}',
-                    f'Venta {anio_ref_ant}': '${:,.0f}',
-                    'Variación ($)': '${:,.0f}',
-                    'Variación (%)': '{:,.0f}%'
-                }
-                
-                tabla_ref_estilizada = (
-                    tabla_ref_final.style
-                    .format(format_dict_ref)
-                    .map(color_variacion, subset=['Variación ($)', 'Variación (%)'])
-                )
-                st.dataframe(tabla_ref_estilizada, use_container_width=True, height=350)
+                format_dict_ref = {f'Venta {anio_ref_sel}': '${:,.0f}', f'Venta {anio_ref_ant}': '${:,.0f}', 'Variación ($)': '${:,.0f}', 'Variación (%)': '{:,.0f}%'}
+                st.dataframe(tabla_ref_final.style.format(format_dict_ref).map(color_variacion, subset=['Variación ($)', 'Variación (%)']), use_container_width=True)
 
             else:
-                st.info("No hay datos de referencias para los períodos seleccionados.")
+                st.info("No hay datos de referencias.")
         else:
-            st.warning("⚠️ Selecciona el año y meses para el análisis comparativo de referencias.")
+            st.warning("⚠️ Selecciona el año y meses para el análisis de referencias.")
+
+    # ==========================================
+    # PESTAÑA 3: PRESUPUESTO & ZONAS (PPTO)
+    # ==========================================
+    with tab3:
+        st.subheader("🎯 Cumplimiento de Presupuesto por Zona y Gerente (PPTO)")
+        st.markdown("Cruzando la venta real con los presupuestos y metas de la hoja maestra.")
+
+        if not df_ppto.empty:
+            cols_ppto = df_ppto.columns.tolist()
+            p_zona = next((c for c in cols_ppto if 'zona' in str(c).lower()), cols_ppto[2])
+            p_ppto = next((c for c in cols_ppto if 'presupuesto' in str(c).lower() or 'ppto' in str(c).lower()), cols_ppto[3])
+            p_maestra = next((c for c in cols_ppto if 'maestra' in str(c).lower()), cols_ppto[4] if len(cols_ppto)>4 else cols_ppto[3])
+            p_gerente = next((c for c in cols_ppto if 'gerente' in str(c).lower() or 'supervisor' in str(c).lower()), cols_ppto[1])
+
+            df_ventas_zona = df_f.groupby(col_zona)[col_valor].sum().reset_index().rename(columns={col_valor: 'Venta Real'})
+
+            df_ppto[p_zona] = df_ppto[p_zona].astype(str).str.strip()
+            df_ventas_zona[col_zona] = df_ventas_zona[col_zona].astype(str).str.strip()
+            df_ppto[p_ppto] = pd.to_numeric(df_ppto[p_ppto], errors='coerce').fillna(0)
+            df_ppto[p_maestra] = pd.to_numeric(df_ppto[p_maestra], errors='coerce').fillna(0)
+
+            tabla_cumplimiento = pd.merge(df_ppto, df_ventas_zona, left_on=p_zona, right_on=col_zona, how='left').fillna(0)
+            
+            tabla_cumplimiento['% Cumplimiento'] = (tabla_cumplimiento['Venta Real'] / tabla_cumplimiento[p_ppto].replace(0, 1)) * 100
+            tabla_cumplimiento['Diferencia ($)'] = tabla_cumplimiento['Venta Real'] - tabla_cumplimiento[p_ppto]
+
+            total_ppto = tabla_cumplimiento[p_ppto].sum()
+            total_venta_real = tabla_cumplimiento['Venta Real'].sum()
+            cumplimiento_global_ppto = (total_venta_real / total_ppto) * 100 if total_ppto > 0 else 0
+
+            kp1, kp2, kp3 = st.columns(3)
+            kp1.metric(label="Presupuesto Total (Meta)", value=f"${total_ppto:,.0f}")
+            kp2.metric(label="Venta Real Acumulada", value=f"${total_venta_real:,.0f}", delta=f"{cumplimiento_global_ppto:,.1f}% Cumplimiento")
+            kp3.metric(label="Zonas Evaluadas", value=f"{len(tabla_cumplimiento)} zonas")
+
+            st.markdown("---")
+            st.subheader("📋 Detalle de Ejecución por Zona y Gerente")
+
+            format_dict_ppto = {
+                p_ppto: '${:,.0f}',
+                'Venta Real': '${:,.0f}',
+                'Diferencia ($)': '${:,.0f}',
+                '% Cumplimiento': '{:,.1f}%'
+            }
+
+            tabla_ppto_estilizada = (
+                tabla_cumplimiento.sort_values(by='% Cumplimiento', ascending=False).style
+                .format(format_dict_ppto)
+                .map(color_variacion, subset=['% Cumplimiento', 'Diferencia ($)'])
+            )
+            st.dataframe(tabla_ppto_estilizada, use_container_width=True, height=380)
+
+        else:
+            st.warning("⚠️ No se encontró la hoja 'PPTO' en tu archivo Excel. Asegúrate de que tenga ese nombre exacto.")
 
 except Exception as e:
     st.error(f"Ocurrió un error al procesar la aplicación: {e}")

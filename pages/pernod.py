@@ -5,6 +5,15 @@ import plotly.express as px
 # Configuración de la página
 st.set_page_config(page_title="SEGUIMIENTO PERNOD RICARD", layout="wide")
 
+# Estilo CSS para evitar que las métricas largas se recorten con "..."
+st.markdown("""
+    <style>
+        [data-testid="stMetricValue"] {
+            font-size: 1.4rem !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 # Título llamativo
 st.title("🍾 SEGUIMIENTO PERNOD RICARD 🥂")
 st.markdown("---")
@@ -341,10 +350,9 @@ try:
     # ==========================================
     with tab3:
         st.subheader("🎯 Cumplimiento de Presupuesto por Zona (PPTO)")
-        st.markdown("Filtra por mes y zona para evaluar el cumplimiento real de la cuota.")
+        st.markdown("Filtra por mes y zona o supervisor para evaluar el cumplimiento real de la cuota.")
 
         if not df_ppto.empty:
-            # Filtro específico de mes para PPTO
             col_ppto_f1, col_ppto_f2 = st.columns([1, 3])
             with col_ppto_f1:
                 anios_ppto_disp = sorted(df_f[col_anio].dropna().unique())
@@ -356,64 +364,95 @@ try:
             st.markdown("---")
 
             if anio_ppto_sel and meses_ppto_sel:
-                # Filtrar ventas según año, meses y filtros laterales activos (zona, regional, canal, etc.)
-                df_ppto_ventas = df_f[(df_f[col_anio] == int(anio_ppto_sel)) & (df_f[col_mes].isin(meses_ppto_sel))]
+                anio_p = int(anio_ppto_sel)
+                anio_ant_p = anio_p - 1
+
+                df_ppto_ventas_actual = df_f[(df_f[col_anio] == anio_p) & (df_f[col_mes].isin(meses_ppto_sel))]
+                df_ppto_ventas_ant = df_f[(df_f[col_anio] == anio_ant_p) & (df_f[col_mes].isin(meses_ppto_sel))]
 
                 cols_ppto = df_ppto.columns.tolist()
+                p_gerente_ppto = next((c for c in cols_ppto if 'gerente' in str(c).lower() or 'supervisor' in str(c).lower()), cols_ppto[1])
                 p_zona = next((c for c in cols_ppto if 'zona' in str(c).lower()), cols_ppto[2])
                 p_ppto = next((c for c in cols_ppto if 'presupuesto' in str(c).lower() or 'ppto' in str(c).lower()), cols_ppto[3])
                 p_maestra = next((c for c in cols_ppto if 'maestra' in str(c).lower()), cols_ppto[4] if len(cols_ppto)>4 else cols_ppto[3])
-                
-                # Si en el filtro lateral hay una zona seleccionada, filtramos también la hoja PPTO
+
                 df_ppto_filtrado = df_ppto.copy()
                 if sel_zona != "Todos":
                     df_ppto_filtrado = df_ppto_filtrado[df_ppto_filtrado[p_zona].astype(str) == sel_zona]
+                if sel_gerente != "Todos":
+                    df_ppto_filtrado = df_ppto_filtrado[df_ppto_filtrado[p_gerente].astype(str) == sel_gerente]
 
-                df_ventas_zona = df_ppto_ventas.groupby(col_zona)[col_valor].sum().reset_index().rename(columns={col_valor: 'Venta Real'})
+                df_ventas_zona = df_ppto_ventas_actual.groupby(col_zona)[col_valor].sum().reset_index().rename(columns={col_valor: 'Venta Real'})
+                
+                # Clientes únicos impactados con venta > 1 por zona
+                df_cli_gt1 = df_ppto_ventas_actual[df_ppto_ventas_actual[col_valor] > 1].groupby(col_zona)[col_cliente].nunique().reset_index().rename(columns={col_cliente: 'Clientes Impactados (> $1)'})
+                
+                # Cantidad de pedidos actuales y anteriores por zona
+                df_pedidos_act = df_ppto_ventas_actual.groupby(col_zona).size().reset_index(name='Pedidos Actuales')
+                df_pedidos_ant = df_ppto_ventas_ant.groupby(col_zona).size().reset_index(name='Pedidos Anteriores')
 
                 df_ppto_filtrado[p_zona] = df_ppto_filtrado[p_zona].astype(str).str.strip()
                 df_ventas_zona[col_zona] = df_ventas_zona[col_zona].astype(str).str.strip()
+                df_cli_gt1[col_zona] = df_cli_gt1[col_zona].astype(str).str.strip()
+                df_pedidos_act[col_zona] = df_pedidos_act[col_zona].astype(str).str.strip()
+                df_pedidos_ant[col_zona] = df_pedidos_ant[col_zona].astype(str).str.strip()
+
                 df_ppto_filtrado[p_ppto] = pd.to_numeric(df_ppto_filtrado[p_ppto], errors='coerce').fillna(0)
                 df_ppto_filtrado[p_maestra] = pd.to_numeric(df_ppto_filtrado[p_maestra], errors='coerce').fillna(0)
 
                 tabla_cumplimiento = pd.merge(df_ppto_filtrado, df_ventas_zona, left_on=p_zona, right_on=col_zona, how='left').fillna(0)
-                
+                tabla_cumplimiento = pd.merge(tabla_cumplimiento, df_cli_gt1, on=col_zona, how='left').fillna(0)
+                tabla_cumplimiento = pd.merge(tabla_cumplimiento, df_pedidos_act, on=col_zona, how='left').fillna(0)
+                tabla_cumplimiento = pd.merge(tabla_cumplimiento, df_pedidos_ant, on=col_zona, how='left').fillna(0)
+
                 tabla_cumplimiento['% Cumplimiento'] = (tabla_cumplimiento['Venta Real'] / tabla_cumplimiento[p_ppto].replace(0, 1)) * 100
                 tabla_cumplimiento['Diferencia ($)'] = tabla_cumplimiento['Venta Real'] - tabla_cumplimiento[p_ppto]
+                tabla_cumplimiento['Var. Pedidos YoY'] = tabla_cumplimiento['Pedidos Actuales'] - tabla_cumplimiento['Pedidos Anteriores']
 
                 total_ppto = tabla_cumplimiento[p_ppto].sum()
                 total_venta_real = tabla_cumplimiento['Venta Real'].sum()
                 cumplimiento_global_ppto = (total_venta_real / total_ppto) * 100 if total_ppto > 0 else 0
 
-                # Métricas adicionales solicitadas: Clientes impactados con venta > 1 y Cantidad de Pedidos
-                clientes_impactados_gt1 = df_ppto_ventas[df_ppto_ventas[col_valor] > 1][col_cliente].nunique()
-                cantidad_pedidos = len(df_ppto_ventas)
+                total_clientes_gt1 = df_ppto_ventas_actual[df_ppto_ventas_actual[col_valor] > 1][col_cliente].nunique()
+                total_pedidos_act = len(df_ppto_ventas_actual)
+                total_pedidos_ant = len(df_ppto_ventas_ant)
+                var_pedidos_total = total_pedidos_act - total_pedidos_ant
 
-                kp1, kp2, kp3, kp4, kp5 = st.columns(5)
-                kp1.metric(label="Presupuesto Total (Meta)", value=f"${total_ppto:,.0f}")
-                kp2.metric(label="Venta Real Acumulada", value=f"${total_venta_real:,.0f}", delta=f"{cumplimiento_global_ppto:,.1f}% Cumpl.")
-                kp3.metric(label="Zonas Evaluadas", value=f"{len(tabla_cumplimiento)}")
-                kp4.metric(label="Clientes Impactados (> $1)", value=f"{clientes_impactados_gt1:,}")
-                kp5.metric(label="Cantidad de Pedidos", value=f"{cantidad_pedidos:,}")
+                # Distribución ajustada en dos filas o con anchos óptimos para que no se recorten los números
+                k1, k2, k3 = st.columns(3)
+                k1.metric(label="Presupuesto Total (Meta)", value=f"${total_ppto:,.0f}")
+                k2.metric(label="Venta Real Acumulada", value=f"${total_venta_real:,.0f}", delta=f"{cumplimiento_global_ppto:,.1f}% Cumpl.")
+                k3.metric(label="Zonas Evaluadas", value=f"{len(tabla_cumplimiento)}")
+
+                k4, k5 = st.columns(2)
+                k4.metric(label="Clientes Impactados (> $1)", value=f"{total_clientes_gt1:,}")
+                k5.metric(label="Cantidad de Pedidos", value=f"{total_pedidos_act:,}", delta=f"{var_pedidos_total:+d} YoY")
 
                 st.markdown("---")
                 st.subheader("📋 Detalle de Ejecución por Zona")
 
-                # Eliminamos la columna de Nombre Gerente si existe en la tabla para no mostrarla
-                cols_a_ocultar = ['Nombre Gerente', 'Gerente', 'Supervisor']
+                cols_a_ocultar = ['Nombre Gerente', 'Gerente', 'Supervisor', 'Pedidos Anteriores']
                 tabla_mostrar = tabla_cumplimiento.drop(columns=[c for c in cols_a_ocultar if c in tabla_cumplimiento.columns])
+                
+                tabla_mostrar = tabla_mostrar.rename(columns={
+                    'Pedidos Actuales': 'Cantidad Pedidos',
+                    'Clientes Impactados (> $1)': 'Clientes Impactados (> $1)'
+                })
 
                 format_dict_ppto = {
                     p_ppto: '${:,.0f}',
                     'Venta Real': '${:,.0f}',
                     'Diferencia ($)': '${:,.0f}',
-                    '% Cumplimiento': '{:,.1f}%'
+                    '% Cumplimiento': '{:,.1f}%',
+                    'Cantidad Pedidos': '{:,.0f}',
+                    'Var. Pedidos YoY': '{:+,.0f}',
+                    'Clientes Impactados (> $1)': '{:,.0f}'
                 }
 
                 tabla_ppto_estilizada = (
                     tabla_mostrar.sort_values(by='% Cumplimiento', ascending=False).style
                     .format(format_dict_ppto)
-                    .map(color_variacion, subset=['% Cumplimiento', 'Diferencia ($)'])
+                    .map(color_variacion, subset=['% Cumplimiento', 'Diferencia ($)', 'Var. Pedidos YoY'])
                 )
                 st.dataframe(tabla_ppto_estilizada, use_container_width=True, height=380)
             else:

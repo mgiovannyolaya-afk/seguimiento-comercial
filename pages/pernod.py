@@ -146,7 +146,6 @@ try:
             total_anterior = df_ant[col_valor].sum()
             crecimiento_global = ((total_actual / total_anterior) - 1) * 100 if total_anterior > 0 else 0
 
-            # CÁLCULO DE TICKET PROMEDIO POR CLIENTE
             cli_unicos_act = df_actual[df_actual[col_valor] > 1][col_cliente].nunique()
             cli_unicos_ant = df_ant[df_ant[col_valor] > 1][col_cliente].nunique()
 
@@ -154,16 +153,15 @@ try:
             ticket_prom_ant = total_anterior / cli_unicos_ant if cli_unicos_ant > 0 else 0
             var_ticket = ((ticket_prom_act / ticket_prom_ant) - 1) * 100 if ticket_prom_ant > 0 else 0
 
-            # MÉTRICAS SUPERIORES (INCLUYENDO TICKET PROMEDIO)
             kpi1, kpi2, kpi3, kpi4 = st.columns(4)
             kpi1.metric(label=f"Ventas Total ({anio_sel})", value=f"${total_actual:,.0f}")
             kpi2.metric(label=f"Ventas Total ({anio_anterior})", value=f"${total_anterior:,.0f}", delta=f"{crecimiento_global:,.0f}% YoY")
-            kpi3.metric(label="Ticket Promedio / Cliente", value=f"${ticket_prom_act:,.0f}", delta=f"{var_ticket:+,.1f}% YoY (Ant: ${ticket_prom_ant:,.0f})")
+            kpi3.metric(label="Ticket Promedio / Cliente", value=f"${ticket_prom_act:,.0f}", delta=f"{var_ticket:+,.1f}% YoY")
             kpi4.metric(label="Meses Evaluados", value=f"{len(meses_sel)} mes(es)")
 
             st.markdown("---")
 
-            # --- GRÁFICA COMPARATIVA MENSUAL YoY (2025 vs 2026) ---
+            # --- GRÁFICA COMPARATIVA MENSUAL YoY ---
             st.subheader("📈 Tendencia Mensual de Ventas (YoY)")
             
             df_tend_act = df_f[df_f[col_anio] == anio_sel].groupby(col_mes)[col_valor].sum().reset_index()
@@ -186,16 +184,8 @@ try:
                     color_discrete_map={str(anio_sel): '#0066cc', str(anio_anterior): '#94a3b8'}
                 )
                 fig_tend.update_traces(hovertemplate='<b>Mes:</b> %{x}<br><b>Venta:</b> $%{y:,.0f}<extra></extra>')
-                fig_tend.update_layout(
-                    xaxis_title="Mes", 
-                    yaxis_title="Venta Total ($)", 
-                    legend_title="Año",
-                    height=350,
-                    margin=dict(l=0, r=0, t=20, b=0)
-                )
+                fig_tend.update_layout(xaxis_title="Mes", yaxis_title="Venta Total ($)", legend_title="Año", height=350, margin=dict(l=0, r=0, t=20, b=0))
                 st.plotly_chart(fig_tend, use_container_width=True)
-            else:
-                st.info("No hay datos suficientes para mostrar la tendencia mensual.")
 
             st.markdown("---")
             st.subheader("🌐 Resumen de Variación General por Unidad de Negocio")
@@ -257,27 +247,65 @@ try:
                     st.plotly_chart(fig_cli, use_container_width=True)
                 else: st.info("Sin datos.")
 
+            # ==========================================
+            # TABLA DETALLE POR CLIENTE CON TICKET Y PORTAFOLIO
+            # ==========================================
             st.markdown("---")
-            st.subheader("📋 Detalle por Cliente (Año Actual vs. Año Anterior)")
+            st.subheader("📋 Detalle Avanzado por Cliente (Ventas, Ticket Promedio y Portafolio)")
             col_busq, col_desc = st.columns([3, 1])
             with col_busq: busqueda_tabla = st.text_input("🔍 Buscar cliente:", "", key="busq_cli_tab1")
 
+            # Agrupaciones base de ventas
             ventas_actual = df_actual.groupby(col_cliente)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_sel}'})
             ventas_anterior = df_ant.groupby(col_cliente)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_anterior}'})
+            
+            # Conteo de pedidos/transacciones para ticket promedio por cliente
+            pedidos_act = df_actual.groupby(col_cliente).size().reset_index(name='Pedidos_Act')
+            pedidos_ant = df_ant.groupby(col_cliente).size().reset_index(name='Pedidos_Ant')
+
+            # Profundidad de portafolio (SKUs distintos comprados en el año actual)
+            skus_act = df_actual[df_actual[col_valor] > 0].groupby(col_cliente)[col_referencia].nunique().reset_index(name='Portafolio (SKUs)')
+
+            # Unificación de la tabla de clientes
             tabla_final = pd.merge(ventas_actual, ventas_anterior, on=col_cliente, how='outer').fillna(0)
+            tabla_final = pd.merge(tabla_final, pedidos_act, on=col_cliente, how='left').fillna(1)
+            tabla_final = pd.merge(tabla_final, pedidos_ant, on=col_cliente, how='left').fillna(1)
+            tabla_final = pd.merge(tabla_final, skus_act, on=col_cliente, how='left').fillna(0)
+
+            # Cálculo de métricas avanzadas por fila de cliente
+            tabla_final[f'Ticket Prom. {anio_sel}'] = tabla_final[f'Venta {anio_sel}'] / tabla_final['Pedidos_Act']
+            tabla_final[f'Ticket Prom. {anio_anterior}'] = tabla_final[f'Venta {anio_anterior}'] / tabla_final['Pedidos_Ant']
             tabla_final['Variación ($)'] = tabla_final[f'Venta {anio_sel}'] - tabla_final[f'Venta {anio_anterior}']
             tabla_final['Variación (%)'] = ((tabla_final[f'Venta {anio_sel}'] / tabla_final[f'Venta {anio_anterior}'].replace(0, 1)) - 1) * 100
-            tabla_final = tabla_final.sort_values(by=f'Venta {anio_sel}', ascending=False)
+
+            # Selección y orden de columnas finales para la tabla
+            cols_mostrar = [
+                col_cliente, 
+                f'Venta {anio_sel}', 
+                f'Venta {anio_anterior}', 
+                'Variación ($)', 
+                'Variación (%)', 
+                f'Ticket Prom. {anio_sel}', 
+                'Portafolio (SKUs)'
+            ]
+            tabla_final = tabla_final[cols_mostrar].sort_values(by=f'Venta {anio_sel}', ascending=False)
 
             if busqueda_tabla:
                 tabla_final = tabla_final[tabla_final[col_cliente].astype(str).str.contains(busqueda_tabla, case=False, na=False)]
 
             with col_desc:
                 st.write("")
-                st.download_button(label="📥 Descargar CSV", data=tabla_final.to_csv(index=False).encode('utf-8'), file_name=f"detalle_clientes_{anio_sel}.csv", mime="text/csv", key="dl_csv_tab1")
+                st.download_button(label="📥 Descargar CSV", data=tabla_final.to_csv(index=False).encode('utf-8'), file_name=f"detalle_avanzado_clientes_{anio_sel}.csv", mime="text/csv", key="dl_csv_tab1")
 
-            format_dict = {f'Venta {anio_sel}': '${:,.0f}', f'Venta {anio_anterior}': '${:,.0f}', 'Variación ($)': '${:,.0f}', 'Variación (%)': '{:,.0f}%'}
-            st.dataframe(tabla_final.style.format(format_dict).map(color_variacion, subset=['Variación ($)', 'Variación (%)']), use_container_width=True)
+            format_dict = {
+                f'Venta {anio_sel}': '${:,.0f}', 
+                f'Venta {anio_anterior}': '${:,.0f}', 
+                'Variación ($)': '${:,.0f}', 
+                'Variación (%)': '{:,.0f}%',
+                f'Ticket Prom. {anio_sel}': '${:,.0f}',
+                'Portafolio (SKUs)': '{:,.0f}'
+            }
+            st.dataframe(tabla_final.style.format(format_dict).map(color_variacion, subset=['Variación ($)', 'Variación (%)']), use_container_width=True, height=400)
 
             st.markdown("---")
             st.subheader(f"⚠️ Clientes Inactivos (Compraron en {anio_anterior} pero tienen $0 en {anio_sel})")
@@ -301,7 +329,7 @@ try:
     # PESTAÑA 2: ANÁLISIS DE REFERENCIAS (YoY)
     # ==========================================
     with tab2:
-        st.subheader("📦 Análisis Avanzado de Referencias y Portafolio (YoY)")
+        st.subheader("📦 Análisis Avanzado de Referencias (YoY)")
         col_ref_f1, col_ref_f2, col_ref_f3 = st.columns([1, 2, 1])
         with col_ref_f1:
             anios_ref_disp = sorted(df_f[col_anio].dropna().unique())
@@ -318,44 +346,6 @@ try:
 
             df_ref_actual = df_f[(df_f[col_anio] == anio_ref_sel) & (df_f[col_mes].isin(meses_ref_sel))]
             df_ref_ant = df_f[(df_f[col_anio] == anio_ref_ant) & (df_f[col_mes].isin(meses_ref_sel))]
-
-            # --- FUNCIONALIDAD: MIX Y PROFUNDIDAD DE PORTAFOLIO POR CLIENTE ---
-            if not df_ref_actual.empty:
-                st.markdown("---")
-                st.subheader("🌀 Profundidad y Mix de Portafolio por Cliente")
-                
-                # Conteo de SKUs únicos por cliente
-                skus_por_cliente = df_ref_actual[df_ref_actual[col_valor] > 0].groupby(col_cliente)[col_referencia].nunique().reset_index()
-                skus_por_cliente.columns = [col_cliente, 'SKUs_Comprados']
-
-                def categorizar_mix(cant):
-                    if cant == 1: return '1 Referencia (Monoproducto)'
-                    elif cant <= 3: return '2 a 3 Referencias'
-                    else: return '4+ Referencias (Portafolio Amplio)'
-
-                skus_por_cliente['Rango_Mix'] = skus_por_cliente['SKUs_Comprados'].apply(categorizar_mix)
-                resumen_mix = skus_por_cliente['Rango_Mix'].value_counts().reset_index()
-                resumen_mix.columns = ['Rango', 'Cantidad_Clientes']
-
-                promedio_skus = skus_por_cliente['SKUs_Comprados'].mean()
-
-                col_mix1, col_mix2 = st.columns([1, 1.5])
-                with col_mix1:
-                    st.metric(label="Promedio de Referencias por Cliente", value=f"{promedio_skus:.1f} SKUs")
-                    fig_donut = px.pie(
-                        resumen_mix, 
-                        names='Rango', 
-                        values='Cantidad_Clientes', 
-                        hole=0.4,
-                        color_discrete_sequence=['#94a3b8', '#0066cc', '#2E7D32']
-                    )
-                    fig_donut.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=250)
-                    st.plotly_chart(fig_donut, use_container_width=True)
-
-                with col_mix2:
-                    st.markdown("**💡 Interpretación de Diversificación Comercial:**")
-                    st.write("Esta métrica permite identificar si la fuerza de ventas está logrando **Cross-Selling (Venta Cruzada)** de marcas complejas o si los clientes están concentrados en un solo producto de Pernod Ricard.")
-                    st.dataframe(resumen_mix.style.format({'Cantidad_Clientes': '{:,.0f}'}), use_container_width=True)
 
             ref_act = df_ref_actual.groupby(col_referencia)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_ref_sel}'})
             ref_ant = df_ref_ant.groupby(col_referencia)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_ref_ant}'})
@@ -503,7 +493,6 @@ try:
                 total_venta_real = tabla_cumplimiento['Venta'].sum()
                 cumplimiento_global_ppto = (total_venta_real / total_ppto) * 100 if total_ppto > 0 else 0
 
-                # Clientes únicos globales actuales y anteriores filtrados por la zona/supervisor activo
                 zonas_filtradas = tabla_cumplimiento[p_zona].astype(str).unique()
                 df_act_sup = df_ppto_ventas_actual[df_ppto_ventas_actual[col_zona].astype(str).isin(zonas_filtradas)]
                 df_ant_sup = df_ppto_ventas_ant[df_ppto_ventas_ant[col_zona].astype(str).isin(zonas_filtradas)]
@@ -512,7 +501,6 @@ try:
                 total_clientes_ant = df_ant_sup[df_ant_sup[col_valor] > 1][col_cliente].nunique()
                 var_clientes_yoy = total_clientes_gt1 - total_clientes_ant
 
-                # Ventas año anterior y su variación porcentual y en dinero
                 total_venta_ant = df_ant_sup[col_valor].sum()
                 var_venta_monto = total_venta_real - total_venta_ant
                 var_venta_porc = ((total_venta_real / total_venta_ant) - 1) * 100 if total_venta_ant > 0 else 0
@@ -521,7 +509,6 @@ try:
                 total_pedidos_ant = int(tabla_cumplimiento['Pedidos Ant'].sum())
                 var_pedidos_total = total_pedidos_act - total_pedidos_ant
 
-                # Métricas superiores organizadas de forma nativa y limpia
                 k1, k2, k3 = st.columns(3)
                 k1.metric(label="Presupuesto Total (Meta)", value=f"${total_ppto:,.0f}")
                 
@@ -550,7 +537,6 @@ try:
                 with col_sim1:
                     dia_corte = st.number_input("Día de corte transcurrido:", min_value=1, max_value=total_dias_mes, value=min(dia_actual, total_dias_mes), key="dia_corte_input")
                 
-                # Proyección por regla de tres de ritmo diario
                 venta_diaria_prom = total_venta_real / dia_corte if dia_corte > 0 else 0
                 proyeccion_cierre = venta_diaria_prom * total_dias_mes
                 cumplimiento_proyectado = (proyeccion_cierre / total_ppto) * 100 if total_ppto > 0 else 0

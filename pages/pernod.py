@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from datetime import datetime
+import calendar
 
 # Configuración de la página
 st.set_page_config(page_title="SEGUIMIENTO PERNOD RICARD", layout="wide")
@@ -9,7 +11,7 @@ st.set_page_config(page_title="SEGUIMIENTO PERNOD RICARD", layout="wide")
 st.markdown("""
     <style>
         [data-testid="stMetricValue"] {
-            font-size: 1.4rem !important;
+            font-size: 1.35rem !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -144,17 +146,26 @@ try:
             total_anterior = df_ant[col_valor].sum()
             crecimiento_global = ((total_actual / total_anterior) - 1) * 100 if total_anterior > 0 else 0
 
-            kpi1, kpi2, kpi3 = st.columns(3)
+            # CÁLCULO DE TICKET PROMEDIO POR CLIENTE
+            cli_unicos_act = df_actual[df_actual[col_valor] > 1][col_cliente].nunique()
+            cli_unicos_ant = df_ant[df_ant[col_valor] > 1][col_cliente].nunique()
+
+            ticket_prom_act = total_actual / cli_unicos_act if cli_unicos_act > 0 else 0
+            ticket_prom_ant = total_anterior / cli_unicos_ant if cli_unicos_ant > 0 else 0
+            var_ticket = ((ticket_prom_act / ticket_prom_ant) - 1) * 100 if ticket_prom_ant > 0 else 0
+
+            # MÉTRICAS SUPERIORES (INCLUYENDO TICKET PROMEDIO)
+            kpi1, kpi2, kpi3, kpi4 = st.columns(4)
             kpi1.metric(label=f"Ventas Total ({anio_sel})", value=f"${total_actual:,.0f}")
             kpi2.metric(label=f"Ventas Total ({anio_anterior})", value=f"${total_anterior:,.0f}", delta=f"{crecimiento_global:,.0f}% YoY")
-            kpi3.metric(label="Meses Evaluados", value=f"{len(meses_sel)} mes(es)")
+            kpi3.metric(label="Ticket Promedio / Cliente", value=f"${ticket_prom_act:,.0f}", delta=f"{var_ticket:+,.1f}% YoY (Ant: ${ticket_prom_ant:,.0f})")
+            kpi4.metric(label="Meses Evaluados", value=f"{len(meses_sel)} mes(es)")
 
             st.markdown("---")
 
             # --- GRÁFICA COMPARATIVA MENSUAL YoY (2025 vs 2026) ---
             st.subheader("📈 Tendencia Mensual de Ventas (YoY)")
             
-            # Gráfica basada en todo el año o los meses disponibles para comparar las líneas completas
             df_tend_act = df_f[df_f[col_anio] == anio_sel].groupby(col_mes)[col_valor].sum().reset_index()
             df_tend_act['Año'] = str(anio_sel)
             
@@ -290,7 +301,7 @@ try:
     # PESTAÑA 2: ANÁLISIS DE REFERENCIAS (YoY)
     # ==========================================
     with tab2:
-        st.subheader("📦 Análisis Avanzado de Referencias (YoY: 2025 vs 2026)")
+        st.subheader("📦 Análisis Avanzado de Referencias y Portafolio (YoY)")
         col_ref_f1, col_ref_f2, col_ref_f3 = st.columns([1, 2, 1])
         with col_ref_f1:
             anios_ref_disp = sorted(df_f[col_anio].dropna().unique())
@@ -307,6 +318,44 @@ try:
 
             df_ref_actual = df_f[(df_f[col_anio] == anio_ref_sel) & (df_f[col_mes].isin(meses_ref_sel))]
             df_ref_ant = df_f[(df_f[col_anio] == anio_ref_ant) & (df_f[col_mes].isin(meses_ref_sel))]
+
+            # --- FUNCIONALIDAD: MIX Y PROFUNDIDAD DE PORTAFOLIO POR CLIENTE ---
+            if not df_ref_actual.empty:
+                st.markdown("---")
+                st.subheader("🌀 Profundidad y Mix de Portafolio por Cliente")
+                
+                # Conteo de SKUs únicos por cliente
+                skus_por_cliente = df_ref_actual[df_ref_actual[col_valor] > 0].groupby(col_cliente)[col_referencia].nunique().reset_index()
+                skus_por_cliente.columns = [col_cliente, 'SKUs_Comprados']
+
+                def categorizar_mix(cant):
+                    if cant == 1: return '1 Referencia (Monoproducto)'
+                    elif cant <= 3: return '2 a 3 Referencias'
+                    else: return '4+ Referencias (Portafolio Amplio)'
+
+                skus_por_cliente['Rango_Mix'] = skus_por_cliente['SKUs_Comprados'].apply(categorizar_mix)
+                resumen_mix = skus_por_cliente['Rango_Mix'].value_counts().reset_index()
+                resumen_mix.columns = ['Rango', 'Cantidad_Clientes']
+
+                promedio_skus = skus_por_cliente['SKUs_Comprados'].mean()
+
+                col_mix1, col_mix2 = st.columns([1, 1.5])
+                with col_mix1:
+                    st.metric(label="Promedio de Referencias por Cliente", value=f"{promedio_skus:.1f} SKUs")
+                    fig_donut = px.pie(
+                        resumen_mix, 
+                        names='Rango', 
+                        values='Cantidad_Clientes', 
+                        hole=0.4,
+                        color_discrete_sequence=['#94a3b8', '#0066cc', '#2E7D32']
+                    )
+                    fig_donut.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=250)
+                    st.plotly_chart(fig_donut, use_container_width=True)
+
+                with col_mix2:
+                    st.markdown("**💡 Interpretación de Diversificación Comercial:**")
+                    st.write("Esta métrica permite identificar si la fuerza de ventas está logrando **Cross-Selling (Venta Cruzada)** de marcas complejas o si los clientes están concentrados en un solo producto de Pernod Ricard.")
+                    st.dataframe(resumen_mix.style.format({'Cantidad_Clientes': '{:,.0f}'}), use_container_width=True)
 
             ref_act = df_ref_actual.groupby(col_referencia)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_ref_sel}'})
             ref_ant = df_ref_ant.groupby(col_referencia)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_ref_ant}'})
@@ -488,6 +537,32 @@ try:
                 k4, k5 = st.columns(2)
                 k4.metric(label="Clientes Impactados (> $1)", value=f"{total_clientes_gt1:,}", delta=f"{var_clientes_yoy:+d} YoY (Ant: {total_clientes_ant:,})")
                 k5.metric(label="Cantidad de Pedidos", value=f"{total_pedidos_act:,}", delta=f"{var_pedidos_total:+d} YoY (Ant: {total_pedidos_ant:,})")
+
+                # --- SIMULADOR DE RITMO DE VENTA Y PROYECCIÓN A CIERRE ---
+                st.markdown("---")
+                st.subheader("⚡ Simulador & Proyección de Cierre de Mes")
+                
+                hoy = datetime.now()
+                dia_actual = hoy.day
+                total_dias_mes = calendar.monthrange(hoy.year, hoy.month)[1]
+                
+                col_sim1, col_sim2 = st.columns([1, 2])
+                with col_sim1:
+                    dia_corte = st.number_input("Día de corte transcurrido:", min_value=1, max_value=total_dias_mes, value=min(dia_actual, total_dias_mes), key="dia_corte_input")
+                
+                # Proyección por regla de tres de ritmo diario
+                venta_diaria_prom = total_venta_real / dia_corte if dia_corte > 0 else 0
+                proyeccion_cierre = venta_diaria_prom * total_dias_mes
+                cumplimiento_proyectado = (proyeccion_cierre / total_ppto) * 100 if total_ppto > 0 else 0
+                diferencia_meta = proyeccion_cierre - total_ppto
+
+                with col_sim2:
+                    p1, p2, p3 = st.columns(3)
+                    p1.metric(label="Ritmo Diarios Promedio", value=f"${venta_diaria_prom:,.0f}/día")
+                    p2.metric(label="Proyección Estimada Cierre", value=f"${proyeccion_cierre:,.0f}", delta=f"{cumplimiento_proyectado:,.1f}% PPTO Proyectado")
+                    
+                    signo_p = "+" if diferencia_meta >= 0 else ""
+                    p3.metric(label="Brecha vs. Meta 100%", value=f"{signo_p}${diferencia_meta:,.0f}")
 
                 st.markdown("---")
                 st.subheader("📋 Detalle de Ejecución por Zona")

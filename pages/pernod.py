@@ -453,6 +453,43 @@ try:
                 k5.metric(label="Cantidad de Pedidos", value=f"{total_pedidos_act:,}", delta=f"{var_pedidos_total:+d} YoY (Ant: {total_pedidos_ant:,})")
 
                 st.markdown("---")
+
+                # --- GRÁFICA COMPARATIVA MENSUAL YoY (2025 vs 2026) ---
+                st.subheader("📈 Tendencia Mensual de Ventas (YoY)")
+                
+                # Agrupamos los datos filtrados por mes y año para la comparativa
+                df_tend_act = df_act_sup.groupby(col_mes)[col_valor].sum().reset_index()
+                df_tend_act['Año'] = str(anio_p)
+                
+                df_tend_ant = df_ant_sup.groupby(col_mes)[col_valor].sum().reset_index()
+                df_tend_ant['Año'] = str(anio_ant_p)
+                
+                df_tendencia = pd.concat([df_tend_act, df_tend_ant])
+                df_tendencia['Mes_Orden'] = df_tendencia[col_mes].apply(obtener_peso_mes)
+                df_tendencia = df_tendencia.sort_values(by='Mes_Orden')
+
+                if not df_tendencia.empty:
+                    fig_tend = px.line(
+                        df_tendencia, 
+                        x=col_mes, 
+                        y=col_valor, 
+                        color='Año', 
+                        markers=True,
+                        color_discrete_map={str(anio_p): '#0066cc', str(anio_ant_p): '#94a3b8'}
+                    )
+                    fig_tend.update_traces(hovertemplate='<b>Mes:</b> %{x}<br><b>Venta:</b> $%{y:,.0f}<extra></extra>')
+                    fig_tend.update_layout(
+                        xaxis_title="Mes", 
+                        yaxis_title="Venta Total ($)", 
+                        legend_title="Año",
+                        height=350,
+                        margin=dict(l=0, r=0, t=20, b=0)
+                    )
+                    st.plotly_chart(fig_tend, use_container_width=True)
+                else:
+                    st.info("No hay datos suficientes para mostrar la tendencia mensual.")
+
+                st.markdown("---")
                 st.subheader("📋 Detalle de Ejecución por Zona")
 
                 columnas_deseadas = {

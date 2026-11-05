@@ -92,10 +92,11 @@ try:
         df_f_global = df_f_global[df_f_global[col_zona].astype(str) == sel_zona]
 
     # --- CREACIÓN DE PESTAÑAS PRINCIPALES ---
-    tab1, tab2, tab3 = st.tabs([
+    tab1, tab2, tab3, tab4 = st.tabs([
         "📊 Dashboard General & Clientes", 
         "📦 Análisis de Referencias (YoY)", 
-        "🎯 Presupuesto & Zonas (PPTO)"
+        "🎯 Presupuesto & Zonas (PPTO)",
+        "🔍 Detalle Clientes y Referencias"
     ])
 
     orden_meses_ref = [
@@ -255,30 +256,24 @@ try:
             col_busq, col_desc = st.columns([3, 1])
             with col_busq: busqueda_tabla = st.text_input("🔍 Buscar cliente:", "", key="busq_cli_tab1")
 
-            # Agrupaciones base de ventas
             ventas_actual = df_actual.groupby(col_cliente)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_sel}'})
             ventas_anterior = df_ant.groupby(col_cliente)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_anterior}'})
             
-            # Conteo de pedidos/transacciones para ticket promedio por cliente
             pedidos_act = df_actual.groupby(col_cliente).size().reset_index(name='Pedidos_Act')
             pedidos_ant = df_ant.groupby(col_cliente).size().reset_index(name='Pedidos_Ant')
 
-            # Profundidad de portafolio (SKUs distintos comprados en el año actual)
             skus_act = df_actual[df_actual[col_valor] > 0].groupby(col_cliente)[col_referencia].nunique().reset_index(name='Portafolio (SKUs)')
 
-            # Unificación de la tabla de clientes
             tabla_final = pd.merge(ventas_actual, ventas_anterior, on=col_cliente, how='outer').fillna(0)
             tabla_final = pd.merge(tabla_final, pedidos_act, on=col_cliente, how='left').fillna(1)
             tabla_final = pd.merge(tabla_final, pedidos_ant, on=col_cliente, how='left').fillna(1)
             tabla_final = pd.merge(tabla_final, skus_act, on=col_cliente, how='left').fillna(0)
 
-            # Cálculo de métricas avanzadas por fila de cliente
             tabla_final[f'Ticket Prom. {anio_sel}'] = tabla_final[f'Venta {anio_sel}'] / tabla_final['Pedidos_Act']
             tabla_final[f'Ticket Prom. {anio_anterior}'] = tabla_final[f'Venta {anio_anterior}'] / tabla_final['Pedidos_Ant']
             tabla_final['Variación ($)'] = tabla_final[f'Venta {anio_sel}'] - tabla_final[f'Venta {anio_anterior}']
             tabla_final['Variación (%)'] = ((tabla_final[f'Venta {anio_sel}'] / tabla_final[f'Venta {anio_anterior}'].replace(0, 1)) - 1) * 100
 
-            # Selección y orden de columnas finales para la tabla
             cols_mostrar = [
                 col_cliente, 
                 f'Venta {anio_sel}', 
@@ -493,106 +488,93 @@ try:
                 total_venta_real = tabla_cumplimiento['Venta'].sum()
                 cumplimiento_global_ppto = (total_venta_real / total_ppto) * 100 if total_ppto > 0 else 0
 
-                zonas_filtradas = tabla_cumplimiento[p_zona].astype(str).unique()
-                df_act_sup = df_ppto_ventas_actual[df_ppto_ventas_actual[col_zona].astype(str).isin(zonas_filtradas)]
-                df_ant_sup = df_ppto_ventas_ant[df_ppto_ventas_ant[col_zona].astype(str).isin(zonas_filtradas)]
-
-                total_clientes_gt1 = df_act_sup[df_act_sup[col_valor] > 1][col_cliente].nunique()
-                total_clientes_ant = df_ant_sup[df_ant_sup[col_valor] > 1][col_cliente].nunique()
-                var_clientes_yoy = total_clientes_gt1 - total_clientes_ant
-
-                total_venta_ant = df_ant_sup[col_valor].sum()
-                var_venta_monto = total_venta_real - total_venta_ant
-                var_venta_porc = ((total_venta_real / total_venta_ant) - 1) * 100 if total_venta_ant > 0 else 0
-
-                total_pedidos_act = int(tabla_cumplimiento['Pedidos'].sum())
-                total_pedidos_ant = int(tabla_cumplimiento['Pedidos Ant'].sum())
-                var_pedidos_total = total_pedidos_act - total_pedidos_ant
-
-                k1, k2, k3 = st.columns(3)
-                k1.metric(label="Presupuesto Total (Meta)", value=f"${total_ppto:,.0f}")
-                
-                signo_var = "+" if var_venta_monto >= 0 else ""
-                k2.metric(
-                    label="Venta Real Acumulada", 
-                    value=f"${total_venta_real:,.0f}", 
-                    delta=f"{cumplimiento_global_ppto:,.1f}% Cumpl. | Ant: ${total_venta_ant:,.0f} ({signo_var}{var_venta_porc:,.1f}%)"
-                )
-
-                k3.metric(label="Zonas Evaluadas", value=f"{len(tabla_cumplimiento)}")
-
-                k4, k5 = st.columns(2)
-                k4.metric(label="Clientes Impactados (> $1)", value=f"{total_clientes_gt1:,}", delta=f"{var_clientes_yoy:+d} YoY (Ant: {total_clientes_ant:,})")
-                k5.metric(label="Cantidad de Pedidos", value=f"{total_pedidos_act:,}", delta=f"{var_pedidos_total:+d} YoY (Ant: {total_pedidos_ant:,})")
-
-                # --- SIMULADOR DE RITMO DE VENTA Y PROYECCIÓN A CIERRE ---
+                st.metric("Cumplimiento Global PPTO", f"{cumplimiento_global_ppto:,.1f}%", f"${total_venta_real:,.0f} / ${total_ppto:,.0f}")
                 st.markdown("---")
-                st.subheader("⚡ Simulador & Proyección de Cierre de Mes")
-                
-                hoy = datetime.now()
-                dia_actual = hoy.day
-                total_dias_mes = calendar.monthrange(hoy.year, hoy.month)[1]
-                
-                col_sim1, col_sim2 = st.columns([1, 2])
-                with col_sim1:
-                    dia_corte = st.number_input("Día de corte transcurrido:", min_value=1, max_value=total_dias_mes, value=min(dia_actual, total_dias_mes), key="dia_corte_input")
-                
-                venta_diaria_prom = total_venta_real / dia_corte if dia_corte > 0 else 0
-                proyeccion_cierre = venta_diaria_prom * total_dias_mes
-                cumplimiento_proyectado = (proyeccion_cierre / total_ppto) * 100 if total_ppto > 0 else 0
-                diferencia_meta = proyeccion_cierre - total_ppto
-
-                with col_sim2:
-                    p1, p2, p3 = st.columns(3)
-                    p1.metric(label="Ritmo Diarios Promedio", value=f"${venta_diaria_prom:,.0f}/día")
-                    p2.metric(label="Proyección Estimada Cierre", value=f"${proyeccion_cierre:,.0f}", delta=f"{cumplimiento_proyectado:,.1f}% PPTO Proyectado")
-                    
-                    signo_p = "+" if diferencia_meta >= 0 else ""
-                    p3.metric(label="Brecha vs. Meta 100%", value=f"{signo_p}${diferencia_meta:,.0f}")
-
-                st.markdown("---")
-                st.subheader("📋 Detalle de Ejecución por Zona")
-
-                columnas_deseadas = {
-                    p_un: 'Código UN',
-                    p_zona: 'Código Zona',
-                    p_ppto: 'Presupuesto',
-                    'Venta': 'Venta',
-                    '% Cumplimiento Venta': '% Cumplimiento Venta',
-                    p_maestra: 'Maestra',
-                    'Impactos': 'Impactos',
-                    '% Cumplimiento Impactos': '% Cumplimiento Impactos',
-                    'Pedidos': 'Pedidos',
-                    'Pedidos Ant': 'Pedidos Año Anterior',
-                    'Variación Pedidos': 'Variación Pedidos'
-                }
-
-                cols_finales_validas = [c for c in columnas_deseadas.keys() if c in tabla_cumplimiento.columns]
-                tabla_mostrar = tabla_cumplimiento[cols_finales_validas].rename(columns=columnas_deseadas)
 
                 format_dict_ppto = {
-                    'Presupuesto': '${:,.0f}',
+                    p_ppto: '${:,.0f}',
                     'Venta': '${:,.0f}',
                     '% Cumplimiento Venta': '{:,.1f}%',
-                    '% Cumplimiento Impactos': '{:,.1f}%',
-                    'Maestra': '{:,.0f}',
                     'Impactos': '{:,.0f}',
+                    p_maestra: '{:,.0f}',
+                    '% Cumplimiento Impactos': '{:,.1f}%',
                     'Pedidos': '{:,.0f}',
-                    'Pedidos Año Anterior': '{:,.0f}',
-                    'Variación Pedidos': '{:+,.0f}'
+                    'Pedidos Ant': '{:,.0f}',
+                    'Variación Pedidos': '{:,.0f}'
                 }
-
-                tabla_ppto_estilizada = (
-                    tabla_mostrar.sort_values(by='% Cumplimiento Venta', ascending=False).style
-                    .format(format_dict_ppto)
-                    .map(color_variacion, subset=['% Cumplimiento Venta', '% Cumplimiento Impactos', 'Variación Pedidos'])
-                )
-                st.dataframe(tabla_ppto_estilizada, use_container_width=True, height=380)
+                st.dataframe(tabla_cumplimiento.style.format(format_dict_ppto, na_rep="0"), use_container_width=True)
             else:
-                st.warning("⚠️ Selecciona el año y al menos un mes para evaluar el presupuesto.")
-
+                st.warning("Selecciona año y meses para el presupuesto.")
         else:
-            st.warning("⚠️ No se encontró la hoja 'PPTO' en tu archivo Excel. Asegúrate de que tenga ese nombre exacto.")
+            st.info("No se encontró la hoja de presupuesto (PPTO).")
+
+    # ==========================================
+    # PESTAÑA 4: DETALLE CLIENTES Y REFERENCIAS
+    # ==========================================
+    with tab4:
+        st.subheader("🔍 Detalle Interactivo de Referencias por Cliente")
+        st.markdown("Filtra y visualiza qué referencias se le venden a cada cliente y zona de manera detallada.")
+
+        col_f1, col_f2, col_f3 = st.columns(3)
+        df_filtro = df_f.copy()
+
+        with col_f1:
+            zonas_disp_t4 = ["Todas"] + sorted([str(x) for x in df_filtro[col_zona].dropna().unique()])
+            zona_sel_t4 = st.selectbox("Filtrar por Zona:", zonas_disp_t4, key="t4_zona")
+            if zona_sel_t4 != "Todas":
+                df_filtro = df_filtro[df_filtro[col_zona].astype(str) == zona_sel_t4]
+
+        with col_f2:
+            clientes_disp_t4 = ["Todos"] + sorted([str(x) for x in df_filtro[col_cliente].dropna().unique()])
+            cliente_sel_t4 = st.selectbox("Filtrar por Cliente:", clientes_disp_t4, key="t4_cliente")
+            if cliente_sel_t4 != "Todas":
+                df_filtro = df_filtro[df_filtro[col_cliente].astype(str) == cliente_sel_t4]
+
+        with col_f3:
+            refs_disp_t4 = ["Todas"] + sorted([str(x) for x in df_filtro[col_referencia].dropna().unique()])
+            ref_sel_t4 = st.selectbox("Filtrar por Referencia:", refs_disp_t4, key="t4_ref")
+            if ref_sel_t4 != "Todas":
+                df_filtro = df_filtro[df_filtro[col_referencia].astype(str) == ref_sel_t4]
+
+        m1, m2, m3 = st.columns(3)
+        t_ventas = df_filtro[col_valor].sum() if col_valor in df_filtro.columns else 0
+        t_clientes = df_filtro[col_cliente].nunique() if col_cliente in df_filtro.columns else 0
+        t_refs = df_filtro[col_referencia].nunique() if col_referencia in df_filtro.columns else 0
+
+        m1.metric("💰 Ventas en Vista", f"${t_ventas:,.0f}")
+        m2.metric("👥 Clientes Impactados", f"{t_clientes}")
+        m3.metric("🏷️ Referencias Activas", f"{t_refs}")
+
+        st.markdown("---")
+
+        if col_referencia in df_filtro.columns and col_valor in df_filtro.columns:
+            df_top = df_filtro.groupby(col_referencia)[col_valor].sum().reset_index()
+            df_top = df_top.sort_values(by=col_valor, ascending=False).head(10)
+            df_top['Texto_Moneda'] = df_top[col_valor].apply(lambda x: f"${x:,.0f}")
+            
+            fig = px.bar(
+                df_top,
+                x=col_valor,
+                y=col_referencia,
+                orientation='h',
+                text='Texto_Moneda',
+                title="Top 10 Referencias de la Selección",
+                labels={col_valor: 'Ventas Totales ($)', col_referencia: 'Referencia'}
+            )
+            fig.update_traces(texttemplate='%{text}', textposition='auto')
+            fig.update_layout(yaxis={'categoryorder':'total ascending'}, height=400)
+            st.plotly_chart(fig, use_container_width=True)
+
+        st.subheader("📋 Tabla Detallada de Clientes y Referencias")
+        st.dataframe(df_filtro, use_container_width=True)
+
+        st.download_button(
+            label="📥 Descargar datos filtrados en CSV",
+            data=df_filtro.to_csv(index=False).encode('utf-8'),
+            file_name='detalle_clientes_referencias.csv',
+            mime='text/csv',
+            key="dl_t4_csv"
+        )
 
 except Exception as e:
-    st.error(f"Ocurrió un error al procesar la aplicación: {e}")
+    st.error(f"Error al cargar o procesar los datos: {e}")

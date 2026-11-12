@@ -519,4 +519,11 @@ try:
                 st.markdown("---")
 
                 format_dict_ppto = {
-                    p_pp
+                    p_ppto: '${:,.0f}', 'Venta': '${:,.0f}',
+                    '% Cumplimiento Venta': '{:,.1f}%',
+                    'Impactos': '{:,.0f}',
+                    p_maestra: '{:,.0f}',
+                    '% Cumplimiento Impactos': '{:,.1f}%',
+                    'Pedidos': '{:,.0f}',
+                    'Pedidos Ant': '{:,.0f}',
+                    '

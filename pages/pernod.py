@@ -23,7 +23,9 @@ st.markdown("---")
 @st.cache_data
 def cargar_datos():
     xls_path = "BV PERNOD TODA.xlsb"
-    df_ventas = pd.read_excel(xls_path, sheet_name=0, engine="pyxlsb")
+    # sheet_name=None lee TODAS las pestañas del archivo en un diccionario y pd.concat las une
+    dfs_dict = pd.read_excel(xls_path, sheet_name=None, engine="pyxlsb")
+    df_ventas = pd.concat(dfs_dict.values(), ignore_index=True)
     
     try:
         xl = pd.ExcelFile(xls_path, engine="pyxlsb")
@@ -512,69 +514,27 @@ try:
     # PESTAÑA 4: DETALLE CLIENTES Y REFERENCIAS
     # ==========================================
     with tab4:
-        st.subheader("🔍 Detalle Interactivo de Referencias por Cliente")
-        st.markdown("Filtra y visualiza qué referencias se le venden a cada cliente y zona de manera detallada.")
+        st.subheader("🔍 Detalle de Clientes y Referencias")
+        st.markdown("Consulta rápida de transacciones y movimientos detallados.")
+        
+        col_det_f1, col_det_f2 = st.columns([1, 2])
+        with col_det_f1:
+            anios_det_disp = sorted(df_f[col_anio].dropna().unique())
+            anio_det_sel = st.selectbox("Año Detalle:", anios_det_disp, index=len(anios_det_disp)-1 if anios_det_disp else 0, key="anio_det_sel")
+        with col_det_f2:
+            busq_global = st.text_input("🔍 Búsqueda global (Cliente o Referencia):", "", key="busq_global_txt")
 
-        col_f1, col_f2, col_f3 = st.columns(3)
-        df_filtro = df_f.copy()
+        if anio_det_sel:
+            df_detalle_base = df_f[df_f[col_anio] == int(anio_det_sel)]
+            if busq_global:
+                mask = (
+                    df_detalle_base[col_cliente].astype(str).str.contains(busq_global, case=False, na=False) |
+                    df_detalle_base[col_referencia].astype(str).str.contains(busq_global, case=False, na=False)
+                )
+                df_detalle_base = df_detalle_base[mask]
 
-        with col_f1:
-            zonas_disp_t4 = ["Todas"] + sorted([str(x) for x in df_filtro[col_zona].dropna().unique()])
-            zona_sel_t4 = st.selectbox("Filtrar por Zona:", zonas_disp_t4, key="t4_zona")
-            if zona_sel_t4 != "Todas":
-                df_filtro = df_filtro[df_filtro[col_zona].astype(str) == zona_sel_t4]
-
-        with col_f2:
-            clientes_disp_t4 = ["Todos"] + sorted([str(x) for x in df_filtro[col_cliente].dropna().unique()])
-            cliente_sel_t4 = st.selectbox("Filtrar por Cliente:", clientes_disp_t4, key="t4_cliente")
-            if cliente_sel_t4 != "Todas":
-                df_filtro = df_filtro[df_filtro[col_cliente].astype(str) == cliente_sel_t4]
-
-        with col_f3:
-            refs_disp_t4 = ["Todas"] + sorted([str(x) for x in df_filtro[col_referencia].dropna().unique()])
-            ref_sel_t4 = st.selectbox("Filtrar por Referencia:", refs_disp_t4, key="t4_ref")
-            if ref_sel_t4 != "Todas":
-                df_filtro = df_filtro[df_filtro[col_referencia].astype(str) == ref_sel_t4]
-
-        m1, m2, m3 = st.columns(3)
-        t_ventas = df_filtro[col_valor].sum() if col_valor in df_filtro.columns else 0
-        t_clientes = df_filtro[col_cliente].nunique() if col_cliente in df_filtro.columns else 0
-        t_refs = df_filtro[col_referencia].nunique() if col_referencia in df_filtro.columns else 0
-
-        m1.metric("💰 Ventas en Vista", f"${t_ventas:,.0f}")
-        m2.metric("👥 Clientes Impactados", f"{t_clientes}")
-        m3.metric("🏷️ Referencias Activas", f"{t_refs}")
-
-        st.markdown("---")
-
-        if col_referencia in df_filtro.columns and col_valor in df_filtro.columns:
-            df_top = df_filtro.groupby(col_referencia)[col_valor].sum().reset_index()
-            df_top = df_top.sort_values(by=col_valor, ascending=False).head(10)
-            df_top['Texto_Moneda'] = df_top[col_valor].apply(lambda x: f"${x:,.0f}")
-            
-            fig = px.bar(
-                df_top,
-                x=col_valor,
-                y=col_referencia,
-                orientation='h',
-                text='Texto_Moneda',
-                title="Top 10 Referencias de la Selección",
-                labels={col_valor: 'Ventas Totales ($)', col_referencia: 'Referencia'}
-            )
-            fig.update_traces(texttemplate='%{text}', textposition='auto')
-            fig.update_layout(yaxis={'categoryorder':'total ascending'}, height=400)
-            st.plotly_chart(fig, use_container_width=True)
-
-        st.subheader("📋 Tabla Detallada de Clientes y Referencias")
-        st.dataframe(df_filtro, use_container_width=True)
-
-        st.download_button(
-            label="📥 Descargar datos filtrados en CSV",
-            data=df_filtro.to_csv(index=False).encode('utf-8'),
-            file_name='detalle_clientes_referencias.csv',
-            mime='text/csv',
-            key="dl_t4_csv"
-        )
+            st.dataframe(df_detalle_base.head(500), use_container_width=True)
+            st.caption(Mostrando las primeras 500 filas de resultados coincidentes.)
 
 except Exception as e:
-    st.error(f"Error al cargar o procesar los datos: {e}")
+    st.error(f"⚠️ Ocurrió un error al procesar los datos o las columnas del archivo: {e}")

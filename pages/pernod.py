@@ -63,7 +63,8 @@ try:
     col_valor = detectar_columna(['Ventas Det', 'Venta', 'Valor', 'Total'], 8)
 
     df[col_valor] = pd.to_numeric(df[col_valor], errors='coerce').fillna(0)
-    df[col_anio] = pd.to_numeric(df[col_anio], errors='coerce')
+    # Limpiamos y convertimos la columna de año a enteros puros
+    df[col_anio] = pd.to_numeric(df[col_anio], errors='coerce').fillna(0).astype(int)
 
     # --- BARRA LATERAL: FILTROS GLOBALES ---
     st.sidebar.header("🎯 Filtros Globales")
@@ -128,7 +129,8 @@ try:
         col_f1, col_f2 = st.columns([1, 3])
         
         with col_f1:
-            anios_disp = sorted(df_f[col_anio].dropna().unique())
+            # Filtramos ceros y convertimos los años limpios a enteros
+            anios_disp = sorted([int(x) for x in df_f[col_anio].dropna().unique() if x > 0])
             anio_base = st.selectbox("Selecciona el Año Base:", anios_disp, index=len(anios_disp)-1 if anios_disp else 0, key="anio_tab1")
 
         with col_f2:
@@ -329,7 +331,7 @@ try:
         st.subheader("📦 Análisis Avanzado de Referencias (YoY)")
         col_ref_f1, col_ref_f2, col_ref_f3 = st.columns([1, 2, 1])
         with col_ref_f1:
-            anios_ref_disp = sorted(df_f[col_anio].dropna().unique())
+            anios_ref_disp = sorted([int(x) for x in df_f[col_anio].dropna().unique() if x > 0])
             anio_ref_base = st.selectbox("Año Actual:", anios_ref_disp, index=len(anios_ref_disp)-1 if anios_ref_disp else 0, key="anio_tab2")
         with col_ref_f2:
             meses_ref_disp = sorted(list(df_f[col_mes].dropna().unique()), key=obtener_peso_mes)
@@ -428,7 +430,7 @@ try:
         if not df_ppto.empty:
             col_ppto_f1, col_ppto_f2 = st.columns([1, 3])
             with col_ppto_f1:
-                anios_ppto_disp = sorted(df_f[col_anio].dropna().unique())
+                anios_ppto_disp = sorted([int(x) for x in df_f[col_anio].dropna().unique() if x > 0])
                 anio_ppto_sel = st.selectbox("Año Presupuesto:", anios_ppto_disp, index=len(anios_ppto_disp)-1 if anios_ppto_disp else 0, key="anio_ppto_sel")
             with col_ppto_f2:
                 meses_ppto_disp = sorted(list(df_f[col_mes].dropna().unique()), key=obtener_peso_mes)
@@ -519,7 +521,7 @@ try:
         
         col_det_f1, col_det_f2 = st.columns([1, 2])
         with col_det_f1:
-            anios_det_disp = sorted(df_f[col_anio].dropna().unique())
+            anios_det_disp = sorted([int(x) for x in df_f[col_anio].dropna().unique() if x > 0])
             anio_det_sel = st.selectbox("Año Detalle:", anios_det_disp, index=len(anios_det_disp)-1 if anios_det_disp else 0, key="anio_det_sel")
         with col_det_f2:
             busq_global = st.text_input("🔍 Búsqueda global (Cliente o Referencia):", "", key="busq_global_txt")

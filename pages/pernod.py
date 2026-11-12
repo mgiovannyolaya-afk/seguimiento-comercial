@@ -534,7 +534,7 @@ try:
                 df_detalle_base = df_detalle_base[mask]
 
             st.dataframe(df_detalle_base.head(500), use_container_width=True)
-            st.caption(Mostrando las primeras 500 filas de resultados coincidentes.)
+            st.caption("Mostrando las primeras 500 filas de resultados coincidentes.")
 
 except Exception as e:
     st.error(f"⚠️ Ocurrió un error al procesar los datos o las columnas del archivo: {e}")

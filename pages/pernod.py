@@ -5,10 +5,8 @@ from datetime import datetime
 import calendar
 import io
 
-# Configuración de la página
 st.set_page_config(page_title="SEGUIMIENTO PERNOD RICARD", layout="wide")
 
-# Estilo CSS para evitar que las métricas largas se recorten con "..."
 st.markdown("""
     <style>
         [data-testid="stMetricValue"] {
@@ -17,7 +15,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Título llamativo
 st.title("🍾 SEGUIMIENTO PERNOD RICARD 🥂")
 st.markdown("---")
 
@@ -65,7 +62,6 @@ try:
     df[col_valor] = pd.to_numeric(df[col_valor], errors='coerce').fillna(0)
     df[col_anio] = pd.to_numeric(df[col_anio], errors='coerce').fillna(0).astype(int)
 
-    # --- BARRA LATERAL: FILTROS GLOBALES ---
     st.sidebar.header("🎯 Filtros Globales")
     df_f = df.copy()
 
@@ -93,7 +89,6 @@ try:
         df_f = df_f[df_f[col_zona].astype(str) == sel_zona]
         df_f_global = df_f_global[df_f_global[col_zona].astype(str) == sel_zona]
 
-    # --- CREACIÓN DE PESTAÑAS PRINCIPALES ---
     tab1, tab2, tab3, tab4 = st.tabs([
         "📊 Dashboard General & Clientes", 
         "📦 Análisis de Referencias (YoY)", 
@@ -120,9 +115,6 @@ try:
         except: pass
         return ''
 
-    # ==========================================
-    # PESTAÑA 1: DASHBOARD COMERCIAL GENERAL
-    # ==========================================
     with tab1:
         st.subheader("📅 Panel de Control Temporal")
         col_f1, col_f2 = st.columns([1, 3])
@@ -163,8 +155,6 @@ try:
             kpi4.metric(label="Meses Evaluados", value=f"{len(meses_sel)} mes(es)")
 
             st.markdown("---")
-
-            # --- GRÁFICA COMPARATIVA MENSUAL YoY ---
             st.subheader("📈 Tendencia Mensual de Ventas (YoY)")
             df_tend_act = df_f[df_f[col_anio] == anio_sel].groupby(col_mes)[col_valor].sum().reset_index()
             df_tend_act['Año'] = str(anio_sel)
@@ -314,9 +304,6 @@ try:
         else:
             st.warning("⚠️ Selecciona un Año Base y al menos un Mes.")
 
-    # ==========================================
-    # PESTAÑA 2: ANÁLISIS DE REFERENCIAS (YoY)
-    # ==========================================
     with tab2:
         st.subheader("📦 Análisis Avanzado de Referencias (YoY)")
         col_ref_f1, col_ref_f2, col_ref_f3 = st.columns([1, 2, 1])
@@ -421,9 +408,6 @@ try:
         else:
             st.warning("⚠️ Selecciona el año y meses para el análisis de referencias.")
 
-    # ==========================================
-    # PESTAÑA 3: PRESUPUESTO & ZONAS (PPTO)
-    # ==========================================
     with tab3:
         st.subheader("🎯 Cumplimiento de Presupuesto y Zonas (PPTO)")
         st.markdown("Evaluación ordenada por zona con cumplimiento de venta, impactos y pedidos YoY independientes por mes.")
@@ -478,4 +462,63 @@ try:
                 df_pedidos_ant[col_zona] = df_pedidos_ant[col_zona].astype(str).str.strip()
 
                 df_ppto_filtrado[p_ppto] = pd.to_numeric(df_ppto_filtrado[p_ppto], errors='coerce').fillna(0)
-                df_ppto_filtrado[p_maestra] = pd.to_numeric(df_ppto_filtrado
+                df_ppto_filtrado[p_maestra] = pd.to_numeric(df_ppto_filtrado[p_maestra], errors='coerce').fillna(0)
+
+                tabla_cumplimiento = pd.merge(df_ppto_filtrado, df_ventas_zona, left_on=p_zona, right_on=col_zona, how='left').fillna(0)
+                tabla_cumplimiento = pd.merge(tabla_cumplimiento, df_cli_gt1, on=col_zona, how='left').fillna(0)
+                tabla_cumplimiento = pd.merge(tabla_cumplimiento, df_pedidos_act, on=col_zona, how='left').fillna(0)
+                tabla_cumplimiento = pd.merge(tabla_cumplimiento, df_pedidos_ant, on=col_zona, how='left').fillna(0)
+
+                tabla_cumplimiento['% Cumplimiento Venta'] = (tabla_cumplimiento['Venta'] / tabla_cumplimiento[p_ppto].replace(0, 1)) * 100
+                tabla_cumplimiento['% Cumplimiento Impactos'] = (tabla_cumplimiento['Impactos'] / tabla_cumplimiento[p_maestra].replace(0, 1)) * 100
+                tabla_cumplimiento['Variación Pedidos'] = tabla_cumplimiento['Pedidos'] - tabla_cumplimiento['Pedidos Ant']
+
+                total_ppto = tabla_cumplimiento[p_ppto].sum()
+                total_venta_real = tabla_cumplimiento['Venta'].sum()
+                cumplimiento_global_ppto = (total_venta_real / total_ppto) * 100 if total_ppto > 0 else 0
+
+                st.metric("Cumplimiento Global PPTO", f"{cumplimiento_global_ppto:,.1f}%", f"${total_venta_real:,.0f} / ${total_ppto:,.0f}")
+                st.markdown("---")
+
+                format_dict_ppto = {
+                    p_ppto: '${:,.0f}',
+                    'Venta': '${:,.0f}',
+                    '% Cumplimiento Venta': '{:,.1f}%',
+                    'Impactos': '{:,.0f}',
+                    p_maestra: '{:,.0f}',
+                    '% Cumplimiento Impactos': '{:,.1f}%',
+                    'Pedidos': '{:,.0f}',
+                    'Pedidos Ant': '{:,.0f}',
+                    'Variación Pedidos': '{:,.0f}'
+                }
+                st.dataframe(tabla_cumplimiento.style.format(format_dict_ppto, na_rep="0"), use_container_width=True)
+            else:
+                st.warning("Selecciona año y meses para el presupuesto.")
+        else:
+            st.info("No se encontró la hoja de presupuesto (PPTO).")
+
+    with tab4:
+        st.subheader("🔍 Detalle de Clientes y Referencias")
+        st.markdown("Consulta rápida de transacciones y movimientos detallados.")
+        
+        col_det_f1, col_det_f2 = st.columns([1, 2])
+        with col_det_f1:
+            anios_det_disp = sorted([int(x) for x in df_f[col_anio].dropna().unique() if x > 0])
+            anio_det_sel = st.selectbox("Año Detalle:", anios_det_disp, index=len(anios_det_disp)-1 if anios_det_disp else 0, key="anio_det_sel")
+        with col_det_f2:
+            busq_global = st.text_input("🔍 Búsqueda global (Cliente o Referencia):", "", key="busq_global_txt")
+
+        if anio_det_sel:
+            df_detalle_base = df_f[df_f[col_anio] == int(anio_det_sel)]
+            if busq_global:
+                mask = (
+                    df_detalle_base[col_cliente].astype(str).str.contains(busq_global, case=False, na=False) |
+                    df_detalle_base[col_referencia].astype(str).str.contains(busq_global, case=False, na=False)
+                )
+                df_detalle_base = df_detalle_base[mask]
+
+            st.dataframe(df_detalle_base.head(500), use_container_width=True)
+            st.caption("Mostrando las primeras 500 filas de resultados coincidentes.")
+
+except Exception as e:
+    st.error(f"⚠️ Ocurrió un error al procesar los datos o las columnas del archivo: {e}")

@@ -129,7 +129,6 @@ try:
         col_f1, col_f2 = st.columns([1, 3])
         
         with col_f1:
-            # Filtramos ceros y convertimos los años limpios a enteros
             anios_disp = sorted([int(x) for x in df_f[col_anio].dropna().unique() if x > 0])
             anio_base = st.selectbox("Selecciona el Año Base:", anios_disp, index=len(anios_disp)-1 if anios_disp else 0, key="anio_tab1")
 
@@ -142,7 +141,7 @@ try:
 
         if anio_base and meses_sel:
             anio_sel = int(anio_base)
-            anio_anterior = anio_sel - 1
+            anio_anterior = anio_sel - 1  # Aquí se hace la comparación automática (2025->2024, 2026->2025)
 
             df_actual = df_f[(df_f[col_anio] == anio_sel) & (df_f[col_mes].isin(meses_sel))]
             df_ant = df_f[(df_f[col_anio] == anio_anterior) & (df_f[col_mes].isin(meses_sel))]

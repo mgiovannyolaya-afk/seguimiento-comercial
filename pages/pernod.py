@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 import calendar
+import io
 
 # Configuración de la página
 st.set_page_config(page_title="SEGUIMIENTO PERNOD RICARD", layout="wide")
@@ -141,7 +142,7 @@ try:
 
         if anio_base and meses_sel:
             anio_sel = int(anio_base)
-            anio_anterior = anio_sel - 1  # Aquí se hace la comparación automática (2025->2024, 2026->2025)
+            anio_anterior = anio_sel - 1
 
             df_actual = df_f[(df_f[col_anio] == anio_sel) & (df_f[col_mes].isin(meses_sel))]
             df_ant = df_f[(df_f[col_anio] == anio_anterior) & (df_f[col_mes].isin(meses_sel))]
@@ -293,7 +294,19 @@ try:
 
             with col_desc:
                 st.write("")
-                st.download_button(label="📥 Descargar CSV", data=tabla_final.to_csv(index=False).encode('utf-8'), file_name=f"detalle_avanzado_clientes_{anio_sel}.csv", mime="text/csv", key="dl_csv_tab1")
+                # Generación de archivo Excel en memoria para descarga
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    tabla_final.to_excel(writer, index=False, sheet_name='Detalle Clientes')
+                excel_data = output.getvalue()
+
+                st.download_button(
+                    label="📥 Descargar Excel", 
+                    data=excel_data, 
+                    file_name=f"detalle_avanzado_clientes_{anio_sel}.xlsx", 
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+                    key="dl_excel_tab1"
+                )
 
             format_dict = {
                 f'Venta {anio_sel}': '${:,.0f}', 
@@ -409,7 +422,18 @@ try:
 
                 with col_d_ref:
                     st.write("")
-                    st.download_button(label="📥 Descargar CSV", data=tabla_ref_final.to_csv(index=False).encode('utf-8'), file_name=f"comparativo_referencias_{anio_ref_sel}_vs_{anio_ref_ant}.csv", mime="text/csv", key="dl_ref_csv")
+                    output_ref = io.BytesIO()
+                    with pd.ExcelWriter(output_ref, engine='openpyxl') as writer_ref:
+                        tabla_ref_final.to_excel(writer_ref, index=False, sheet_name='Referencias')
+                    excel_data_ref = output_ref.getvalue()
+
+                    st.download_button(
+                        label="📥 Descargar Excel", 
+                        data=excel_data_ref, 
+                        file_name=f"comparativo_referencias_{anio_ref_sel}_vs_{anio_ref_ant}.xlsx", 
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+                        key="dl_ref_excel"
+                    )
 
                 format_dict_ref = {f'Venta {anio_ref_sel}': '${:,.0f}', f'Venta {anio_ref_ant}': '${:,.0f}', 'Variación ($)': '${:,.0f}', 'Variación (%)': '{:,.0f}%'}
                 st.dataframe(tabla_ref_final.style.format(format_dict_ref).map(color_variacion, subset=['Variación ($)', 'Variación (%)']), use_container_width=True)
@@ -491,51 +515,8 @@ try:
                 total_venta_real = tabla_cumplimiento['Venta'].sum()
                 cumplimiento_global_ppto = (total_venta_real / total_ppto) * 100 if total_ppto > 0 else 0
 
-                st.metric("Cumplimiento Global PPTO", f"{cumplimiento_global_ppto:,.1f}%", f"${total_venta_real:,.0f} / ${total_ppto:,.0f}")
+                st.metric("Cumplimiento Global PPTO", f"{cumplimiento_global_ppto:,.1f}%", f"${total_venta_real:,.0f} /${total_ppto:,.0f}")
                 st.markdown("---")
 
                 format_dict_ppto = {
-                    p_ppto: '${:,.0f}',
-                    'Venta': '${:,.0f}',
-                    '% Cumplimiento Venta': '{:,.1f}%',
-                    'Impactos': '{:,.0f}',
-                    p_maestra: '{:,.0f}',
-                    '% Cumplimiento Impactos': '{:,.1f}%',
-                    'Pedidos': '{:,.0f}',
-                    'Pedidos Ant': '{:,.0f}',
-                    'Variación Pedidos': '{:,.0f}'
-                }
-                st.dataframe(tabla_cumplimiento.style.format(format_dict_ppto, na_rep="0"), use_container_width=True)
-            else:
-                st.warning("Selecciona año y meses para el presupuesto.")
-        else:
-            st.info("No se encontró la hoja de presupuesto (PPTO).")
-
-    # ==========================================
-    # PESTAÑA 4: DETALLE CLIENTES Y REFERENCIAS
-    # ==========================================
-    with tab4:
-        st.subheader("🔍 Detalle de Clientes y Referencias")
-        st.markdown("Consulta rápida de transacciones y movimientos detallados.")
-        
-        col_det_f1, col_det_f2 = st.columns([1, 2])
-        with col_det_f1:
-            anios_det_disp = sorted([int(x) for x in df_f[col_anio].dropna().unique() if x > 0])
-            anio_det_sel = st.selectbox("Año Detalle:", anios_det_disp, index=len(anios_det_disp)-1 if anios_det_disp else 0, key="anio_det_sel")
-        with col_det_f2:
-            busq_global = st.text_input("🔍 Búsqueda global (Cliente o Referencia):", "", key="busq_global_txt")
-
-        if anio_det_sel:
-            df_detalle_base = df_f[df_f[col_anio] == int(anio_det_sel)]
-            if busq_global:
-                mask = (
-                    df_detalle_base[col_cliente].astype(str).str.contains(busq_global, case=False, na=False) |
-                    df_detalle_base[col_referencia].astype(str).str.contains(busq_global, case=False, na=False)
-                )
-                df_detalle_base = df_detalle_base[mask]
-
-            st.dataframe(df_detalle_base.head(500), use_container_width=True)
-            st.caption("Mostrando las primeras 500 filas de resultados coincidentes.")
-
-except Exception as e:
-    st.error(f"⚠️ Ocurrió un error al procesar los datos o las columnas del archivo: {e}")
+                    p_pp

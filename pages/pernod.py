@@ -43,6 +43,15 @@ def _limpiar_clave(val):
     return txt
 
 
+def _normalizar_texto_busqueda(val):
+    if pd.isna(val):
+        return ""
+    txt = str(val).lower()
+    txt = re.sub(r"[^a-z0-9\s]+", " ", txt)
+    txt = re.sub(r"\s+", " ", txt).strip()
+    return txt
+
+
 @st.cache_data
 def cargar_datos(firma=""):
     xls_path = "BV PERNOD TODA.xlsb"
@@ -108,6 +117,18 @@ try:
     col_zona = detectar_columna(["Código Zona", "Codigo Zona", "Cod Zona", "Id Zona"], 3)
     col_cliente = detectar_columna(["Nombre Cliente", "Cliente", "Documento Cliente"], 4)
     col_referencia = detectar_columna(["Referencia", "Artículo", "Articulo", "SKU", "Producto", "Item", "Descripción Item", "Descripcion"], 5)
+
+    col_nombre_producto = next(
+        (
+            c for c in columnas
+            if any(
+                k in _normalizar_texto_busqueda(c)
+                for k in ["nombre de producto", "nombre producto", "nombre del producto", "nombre item", "descripcion", "descripción"]
+            )
+        ),
+        None,
+    )
+
     col_anio = detectar_columna(["Año", "Anio", "Year"], 6)
     col_mes = detectar_columna(["Mes", "Month"], 7)
     col_valor = detectar_columna(["Ventas Det", "Venta", "Valor", "Total"], 8)
@@ -137,10 +158,27 @@ try:
         .map(lambda x: mapa_meses.get(x, x.capitalize()))
     )
 
-    # Cruce automático con hoja MARCAS + detección de referencias que empiezan con KV
+    # Construcción de diccionarios y reglas inteligentes por nombre/abreviatura desde MARCAS
     mapa_cod_marca = {}
     mapa_desc_marca = {}
     marcas_conocidas = []
+    pistas_por_marca = {}
+
+    alias_comunes = {
+        "ballantine": ["ballant", "ballan", "ballanti", "finest", "leno"],
+        "chivas": ["chivas", "12yo", "13yo", "18yo", "sherry", "extra"],
+        "glenlivet": ["glenliv", "glenlivet", "founders", "caribean", "caribbean"],
+        "something": ["something", "some", "special"],
+        "passport": ["passport", "pass", "pas"],
+        "olmeca": ["olmeca", "olme"],
+        "absolut": ["absolut", "abs"],
+        "beefeater": ["beefeater", "beef"],
+        "jameson": ["jameson", "jame"],
+        "perrier": ["perrier", "jouet"],
+        "mumm": ["mumm"],
+        "ricard": ["ricard", "pernod"],
+        "ojo de tigre": ["ojo de tigre", "tigre"],
+    }
 
     if not df_marcas.empty:
         cols_m = df_marcas.columns.tolist()
@@ -153,6 +191,20 @@ try:
             key=len,
             reverse=True,
         )
+
+        for mc in marcas_conocidas:
+            mc_norm = _normalizar_texto_busqueda(mc)
+            pistas = set()
+            for tok in mc_norm.split():
+                if len(tok) >= 4 and tok not in {"years", "year", "old", "the"}:
+                    pistas.add(tok)
+                    if len(tok) >= 6:
+                        pistas.add(tok[:6])
+            for clave_al, lista_al in alias_comunes.items():
+                if clave_al in mc_norm:
+                    for al in lista_al:
+                        pistas.add(_normalizar_texto_busqueda(al))
+            pistas_por_marca[mc] = sorted([p for p in pistas if p], key=len, reverse=True)
 
         for _, row in df_marcas.iterrows():
             marca_val = str(row[m_marca]).strip() if pd.notna(row[m_marca]) else ""
@@ -167,26 +219,52 @@ try:
                 if k_desc and k_desc not in mapa_desc_marca:
                     mapa_desc_marca[k_desc] = marca_val
 
-    def resolver_marca_y_estado(val_ref):
-        texto_orig = "" if pd.isna(val_ref) else str(val_ref).strip()
-        clave = _limpiar_clave(val_ref)
+    def _buscar_marca_por_texto(texto_norm):
+        if not texto_norm:
+            return None
+        for mc in marcas_conocidas:
+            mc_norm = _normalizar_texto_busqueda(mc)
+            if mc_norm and mc_norm in texto_norm:
+                return mc
+        for mc in marcas_conocidas:
+            for pista in pistas_por_marca.get(mc, []):
+                if re.search(rf"\b{re.escape(pista)}", texto_norm):
+                    return mc
+        return None
 
-        if clave in mapa_cod_marca:
-            return mapa_cod_marca[clave], "En base MARCAS"
-        if clave in mapa_desc_marca:
-            return mapa_desc_marca[clave], "En base MARCAS (por desc.)"
+    def resolver_marca_y_estado(fila):
+        val_ref = fila[col_referencia]
+        val_nom_prod = fila[col_nombre_producto] if col_nombre_producto else ""
 
-        es_kv = bool(re.match(r"^kv(?:\b|[\s\-_:/0-9])", clave))
+        clave_ref = _limpiar_clave(val_ref)
+        clave_nom = _limpiar_clave(val_nom_prod)
+
+        # 1. Cruce directo por código/referencia o nombre de producto contra MARCAS
+        if clave_ref in mapa_cod_marca:
+            return mapa_cod_marca[clave_ref], "En base MARCAS"
+        if clave_nom and clave_nom in mapa_desc_marca:
+            return mapa_desc_marca[clave_nom], "En base MARCAS (por nombre producto)"
+        if clave_ref in mapa_desc_marca:
+            return mapa_desc_marca[clave_ref], "En base MARCAS (por desc.)"
+
+        # 2. Priorizar Nombre de producto para identificar marca y detectar si empieza por KV
+        texto_prioritario = _normalizar_texto_busqueda(f"{val_nom_prod} {val_ref}")
+        es_kv = bool(re.match(r"^kv(?:\b|[\s\-_:/0-9])", clave_nom)) or bool(
+            re.match(r"^kv(?:\b|[\s\-_:/0-9])", clave_ref)
+        )
+
+        marca_detectada = _buscar_marca_por_texto(texto_prioritario)
+        if marca_detectada:
+            if es_kv:
+                return f"{marca_detectada} (KV)", "KV asignado por nombre de producto"
+            return marca_detectada, "Asignada por nombre de producto"
+
         if es_kv:
-            for mc in marcas_conocidas:
-                raiz_marca = mc.split()[0].lower()
-                if len(raiz_marca) >= 4 and raiz_marca in clave:
-                    return f"{mc} (KV)", "KV sin registrar en MARCAS"
             return "KV sin identificar", "KV sin registrar en MARCAS"
 
         return "Sin identificar", "No encontrada en MARCAS"
 
-    res_marcas = df[col_referencia].apply(resolver_marca_y_estado)
+    res_marcas = df.apply(resolver_marca_y_estado, axis=1)
     df["Marca Estrategica"] = [r[0] for r in res_marcas]
     df["Estado Cruce Marca"] = [r[1] for r in res_marcas]
 
@@ -856,12 +934,17 @@ try:
             )
 
             st.markdown("---")
-            st.subheader("🔎 Referencias que empiezan por KV no registradas en la hoja MARCAS")
-            df_kv_pend = df_m_act[df_m_act["Estado Cruce Marca"] == "KV sin registrar en MARCAS"].copy()
+            st.subheader("🔎 Referencias y KV que aún quedan sin identificar")
+            df_pend = df_m_act[df_m_act["Marca Estrategica"].isin(["Sin identificar", "KV sin identificar"])].copy()
 
-            if not df_kv_pend.empty:
-                resumen_kv = (
-                    df_kv_pend.groupby([col_referencia, "Marca Estrategica"], as_index=False)
+            if not df_pend.empty:
+                cols_group_pend = [col_referencia]
+                if col_nombre_producto and col_nombre_producto != col_referencia:
+                    cols_group_pend.append(col_nombre_producto)
+                cols_group_pend.extend(["Marca Estrategica", "Estado Cruce Marca"])
+
+                resumen_pend = (
+                    df_pend.groupby(cols_group_pend, as_index=False)
                     .agg(
                         Registros=(col_valor, "count"),
                         Venta_Total=(col_valor, "sum"),
@@ -869,21 +952,21 @@ try:
                     )
                     .sort_values(by="Venta_Total", ascending=False)
                 )
-                st.warning(f"Se detectaron **{len(resumen_kv)}** referencias que empiezan con **KV** sin registro exacto en `MARCAS` (total **${resumen_kv['Venta_Total'].sum():,.0f}** en la selección actual).")
+                st.warning(f"Quedan **{len(resumen_pend)}** referencias sin identificar o `KV` pendientes (total **${resumen_pend['Venta_Total'].sum():,.0f}**).")
 
                 out_kv = io.BytesIO()
                 with pd.ExcelWriter(out_kv, engine="openpyxl") as writer_kv:
-                    resumen_kv.to_excel(writer_kv, index=False, sheet_name="KV_Sin_Registrar")
+                    resumen_pend.to_excel(writer_kv, index=False, sheet_name="Pendientes_Marcas")
                 st.download_button(
-                    label="📥 Descargar KV sin registrar (Excel)",
+                    label="📥 Descargar pendientes de marca (Excel)",
                     data=out_kv.getvalue(),
-                    file_name=f"kv_sin_registrar_marcas_{anio_m}.xlsx",
+                    file_name=f"pendientes_marcas_kv_{anio_m}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     key="dl_kv_excel",
                 )
 
                 st.dataframe(
-                    resumen_kv.style.format({
+                    resumen_pend.style.format({
                         "Registros": "{:,.0f}",
                         "Venta_Total": "${:,.0f}",
                         "Clientes_Unicos": "{:,.0f}",
@@ -891,7 +974,7 @@ try:
                     use_container_width=True,
                 )
             else:
-                st.success("Todas las referencias KV encontradas en la selección actual ya están identificadas.")
+                st.success("¡Listo! Todas las referencias y KV de la selección actual quedaron clasificadas.")
 
     with tab5:
         st.subheader("🔍 Detalle de Clientes y Referencias")

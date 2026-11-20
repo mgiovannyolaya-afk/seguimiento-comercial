@@ -18,12 +18,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("🍾 SEGUIMIENTO PERNOD RICARD 🥂")
+st.title("SEGUIMIENTO PERNOD RICARD")
 st.markdown("---")
 
 
 def _firma_archivo(ruta: str) -> str:
-    """Genera una firma única basada en tamaño, fecha de modificación y hash MD5 del archivo."""
     if not os.path.exists(ruta):
         return "missing"
     stat = os.stat(ruta)
@@ -40,7 +39,6 @@ def cargar_datos(firma_version: str = ""):
     xl = pd.ExcelFile(xls_path, engine="pyxlsb")
     nombres_hojas = xl.sheet_names
 
-    # Separar hoja de presupuesto para evitar mezclarla con las hojas de ventas
     nombre_ppto_real = next((h for h in nombres_hojas if "ppto" in str(h).lower()), None)
     hojas_ventas = [h for h in nombres_hojas if h != nombre_ppto_real]
     if not hojas_ventas:
@@ -130,19 +128,19 @@ try:
     col_valor = detectar_columna(["Ventas Det", "Venta", "Valor", "Total"], 8)
 
     df[col_valor] = pd.to_numeric(
-        df[col_valor].astype(str).str.replace(r"[\$\s]", "", regex=True),
+        df[col_valor].astype(str).str.replace(r"[$\s]", "", regex=True),
         errors="coerce",
     ).fillna(0)
     df[col_anio] = pd.to_numeric(df[col_anio], errors="coerce").fillna(0).astype(int)
     df[col_mes] = df[col_mes].apply(limpiar_etiqueta_mes)
     df = df[df[col_mes] != ""]
 
-    st.sidebar.header("🎯 Filtros Globales")
+    st.sidebar.header("Filtros Globales")
     df_f = df.copy()
     df_f_global = df.copy()
 
     opciones_reg = ["Todos"] + sorted([str(x) for x in df_f[col_regional].dropna().unique()])
-    sel_reg = st.sidebar.selectbox("Código UN (Regional)", opciones_reg, index=0)
+    sel_reg = st.sidebar.selectbox("Codigo UN (Regional)", opciones_reg, index=0)
     if sel_reg != "Todos":
         df_f = df_f[df_f[col_regional].astype(str) == sel_reg]
 
@@ -159,7 +157,7 @@ try:
         df_f_global = df_f_global[df_f_global[col_gerente].astype(str) == sel_gerente]
 
     opciones_zona = ["Todos"] + sorted([str(x) for x in df_f[col_zona].dropna().unique()])
-    sel_zona = st.sidebar.selectbox("Código Zona", opciones_zona, index=0)
+    sel_zona = st.sidebar.selectbox("Codigo Zona", opciones_zona, index=0)
     if sel_zona != "Todos":
         df_f = df_f[df_f[col_zona].astype(str) == sel_zona]
         df_f_global = df_f_global[df_f_global[col_zona].astype(str) == sel_zona]
@@ -184,19 +182,19 @@ try:
                 )
 
     tab1, tab2, tab3, tab4 = st.tabs([
-        "📊 Dashboard General & Clientes",
-        "📦 Análisis de Referencias (YoY)",
-        "🎯 Presupuesto & Zonas (PPTO)",
-        "🔍 Detalle Clientes y Referencias",
+        "Dashboard General & Clientes",
+        "Analisis de Referencias (YoY)",
+        "Presupuesto & Zonas (PPTO)",
+        "Detalle Clientes y Referencias",
     ])
 
     with tab1:
-        st.subheader("📅 Panel de Control Temporal")
+        st.subheader("Panel de Control Temporal")
         col_f1, col_f2 = st.columns([1, 3])
 
         with col_f1:
             anio_base = st.selectbox(
-                "Selecciona el Año Base:",
+                "Selecciona el Ano Base:",
                 anios_base_disp,
                 index=len(anios_base_disp) - 1 if anios_base_disp else 0,
                 key="anio_tab1",
@@ -238,102 +236,4 @@ try:
             kpi1, kpi2, kpi3, kpi4 = st.columns(4)
             kpi1.metric(label=f"Ventas Total ({anio_sel})", value=f"${total_actual:,.0f}")
             kpi2.metric(label=f"Ventas Total ({anio_anterior})", value=f"${total_anterior:,.0f}", delta=f"{crecimiento_global:,.0f}% YoY")
-            kpi3.metric(label="Ticket Promedio / Cliente", value=f"${ticket_prom_act:,.0f}", delta=f"{var_ticket:+,.1f}% YoY")
-            kpi4.metric(label="Meses Evaluados", value=f"{len(meses_sel)} mes(es)")
-
-            st.markdown("---")
-            st.subheader("📈 Tendencia Mensual de Ventas (YoY)")
-            df_tend_act = df_f[df_f[col_anio] == anio_sel].groupby(col_mes, as_index=False)[col_valor].sum()
-            df_tend_act["Año"] = str(anio_sel)
-            df_tend_ant = df_f[df_f[col_anio] == anio_anterior].groupby(col_mes, as_index=False)[col_valor].sum()
-            df_tend_ant["Año"] = str(anio_anterior)
-
-            df_tendencia = pd.concat([df_tend_act, df_tend_ant], ignore_index=True)
-            df_tendencia["Mes_Orden"] = df_tendencia[col_mes].apply(obtener_peso_mes)
-            df_tendencia = df_tendencia.sort_values(by="Mes_Orden")
-
-            if not df_tendencia.empty:
-                fig_tend = px.line(
-                    df_tendencia,
-                    x=col_mes,
-                    y=col_valor,
-                    color="Año",
-                    markers=True,
-                    color_discrete_map={str(anio_sel): "#0066cc", str(anio_anterior): "#94a3b8"},
-                )
-                fig_tend.update_traces(hovertemplate="<b>Mes:</b> %{x}<br><b>Venta:</b> $%{y:,.0f}<extra></extra>")
-                fig_tend.update_layout(
-                    xaxis_title="Mes",
-                    yaxis_title="Venta Total ($)",
-                    legend_title="Año",
-                    height=350,
-                    margin=dict(l=0, r=0, t=20, b=0),
-                )
-                st.plotly_chart(fig_tend, use_container_width=True)
-
-            st.markdown("---")
-            st.subheader("🌐 Resumen de Variación General por Unidad de Negocio")
-            df_global_actual = df_f_global[(df_f_global[col_anio] == anio_sel) & (df_f_global[col_mes].isin(meses_sel))]
-            df_global_ant = df_f_global[(df_f_global[col_anio] == anio_anterior) & (df_f_global[col_mes].isin(meses_sel))]
-
-            reg_actual = df_global_actual.groupby(col_regional, as_index=False)[col_valor].sum().rename(columns={col_valor: f"Venta {anio_sel}"})
-            reg_ant = df_global_ant.groupby(col_regional, as_index=False)[col_valor].sum().rename(columns={col_valor: f"Venta {anio_anterior}"})
-
-            tabla_un_final = pd.merge(reg_actual, reg_ant, on=col_regional, how="outer").fillna(0)
-            tabla_un_final["Variación ($)"] = tabla_un_final[f"Venta {anio_sel}"] - tabla_un_final[f"Venta {anio_anterior}"]
-            tabla_un_final["Variación (%)"] = ((tabla_un_final[f"Venta {anio_sel}"] / tabla_un_final[f"Venta {anio_anterior}"].replace(0, 1)) - 1) * 100
-            tabla_un_final["Crecimiento_Tipo"] = tabla_un_final["Variación (%)"].apply(lambda x: "Crecimiento" if x >= 0 else "Decrecimiento")
-
-            col_vis1, col_vis2 = st.columns([1.2, 1])
-            with col_vis1:
-                orden_vis = tabla_un_final.sort_values(by="Variación (%)", ascending=True)
-                fig_un_vis = px.bar(
-                    orden_vis,
-                    x="Variación (%)",
-                    y=col_regional,
-                    orientation="h",
-                    color="Crecimiento_Tipo",
-                    color_discrete_map={"Crecimiento": "#2E7D32", "Decrecimiento": "#C62828"},
-                    text=orden_vis["Variación (%)"].apply(lambda x: f"{x:,.0f}%"),
-                )
-                fig_un_vis.update_traces(textposition="outside", hovertemplate="<b>%{y}</b><br>Variación: %{x:,.1f}%<extra></extra>")
-                fig_un_vis.update_layout(xaxis_title="Variación (%)", yaxis_title="", showlegend=False, height=300, margin=dict(l=0, r=0, t=10, b=0))
-                st.plotly_chart(fig_un_vis, use_container_width=True)
-
-            with col_vis2:
-                format_dict_un = {
-                    f"Venta {anio_sel}": "${:,.0f}",
-                    f"Venta {anio_anterior}": "${:,.0f}",
-                    "Variación ($)": "${:,.0f}",
-                    "Variación (%)": "{:,.0f}%",
-                }
-                tabla_un_estilizada = (
-                    tabla_un_final.sort_values(by=f"Venta {anio_sel}", ascending=False)
-                    .style.format(format_dict_un)
-                    .map(color_variacion, subset=["Variación ($)", "Variación (%)"])
-                    .hide(subset=["Crecimiento_Tipo"], axis="columns")
-                )
-                st.dataframe(tabla_un_estilizada, use_container_width=True, height=280)
-
-            st.markdown("---")
-            col_g1, col_g2 = st.columns(2)
-            with col_g1:
-                st.subheader(f"📊 Ventas por Regional ({anio_sel})")
-                if not df_actual.empty:
-                    df_reg = df_actual.groupby(col_regional, as_index=False)[col_valor].sum().sort_values(by=col_valor, ascending=False).head(10)
-                    df_reg["Texto_Moneda"] = df_reg[col_valor].apply(lambda x: f"${x:,.0f}")
-                    fig_reg = px.bar(df_reg, x=col_valor, y=col_regional, orientation="h", text="Texto_Moneda", color=col_valor, color_continuous_scale="Blues")
-                    fig_reg.update_traces(texttemplate="%{text}", textposition="auto", hovertemplate="<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>")
-                    fig_reg.update_layout(yaxis={"categoryorder": "total ascending"}, showlegend=False, xaxis_title="Venta ($)", yaxis_title="Regional")
-                    st.plotly_chart(fig_reg, use_container_width=True)
-                else:
-                    st.info("Sin datos.")
-
-            with col_g2:
-                st.subheader("🏆 Top Clientes")
-                if not df_actual.empty:
-                    df_cli_top = df_actual.groupby(col_cliente, as_index=False)[col_valor].sum().sort_values(by=col_valor, ascending=False).head(10)
-                    df_cli_top["Texto_Moneda"] = df_cli_top[col_valor].apply(lambda x: f"${x:,.0f}")
-                    fig_cli = px.bar(df_cli_top, x=col_valor, y=col_cliente, orientation="h", text="Texto_Moneda", color=col_valor, color_continuous_scale="Greens")
-                    fig_cli.update_traces(texttemplate="%{text}", textposition="auto", hovertemplate="<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>")
-                    fig_cli.update_layout(yaxis={"categoryorder": "total ascending"}, showlegend=False
+            kpi3.metric(label="Ticket Promedio

@@ -72,7 +72,6 @@ def _limpiar_marca_visible(val):
 
 
 def _clasificar_por_nombre(texto_norm):
-    """Clasifica una cadena ya normalizada según las marcas del portafolio."""
     if not texto_norm:
         return None
 
@@ -208,7 +207,6 @@ def cargar_datos_rapido(hojas_sel, hoja_ppto, hoja_marcas, motor):
         .map(lambda x: mapa_meses.get(x, x.capitalize()))
     )
 
-    # Mapas desde la hoja MARCAS (Marca | EAN | Producto)
     mapa_ean_marca = {}
     mapa_prod_marca = {}
 
@@ -223,7 +221,6 @@ def cargar_datos_rapido(hojas_sel, hoja_ppto, hoja_marcas, motor):
             prod_raw = row[m_prod] if (m_prod and m_prod in row) else ""
             ean_raw = row[m_ean] if (m_ean and m_ean in row) else ""
 
-            marca_resuelta = None
             if not _es_desconocido_o_vacio(marca_raw):
                 marca_resuelta = _limpiar_marca_visible(marca_raw)
             else:
@@ -231,7 +228,7 @@ def cargar_datos_rapido(hojas_sel, hoja_ppto, hoja_marcas, motor):
 
             if marca_resuelta and marca_resuelta != "Otros":
                 ke = _limpiar_clave(ean_raw)
-                kp = _limpiar_texto_clave = _limpiar_clave(prod_raw)
+                kp = _limpiar_clave(prod_raw)
                 if ke and ke not in mapa_ean_marca:
                     mapa_ean_marca[ke] = marca_resuelta
                 if kp and kp not in mapa_prod_marca:
@@ -557,6 +554,7 @@ try:
             df_ma["Marca Limpia"] = df_ma["Marca Estrategica"].astype(str).map(_limpiar_marca_visible)
             df_mp["Marca Limpia"] = df_mp["Marca Estrategica"].astype(str).map(_limpiar_marca_visible)
 
+            # Primera tabla comparativa por Marca Estratégica
             ma = df_ma.groupby("Marca Limpia", as_index=False)[col_valor].sum().rename(columns={col_valor: f"Venta {am}"})
             mp = df_mp.groupby("Marca Limpia", as_index=False)[col_valor].sum().rename(columns={col_valor: f"Venta {am_ant}"})
 
@@ -594,27 +592,75 @@ try:
             )
 
             st.markdown("---")
-            st.subheader("🔎 Referencias asignadas a 'Otros'")
-            df_otros = df_ma[df_ma["Marca Limpia"] == "Otros"]
-            if not df_otros.empty:
-                g_cols = [col_referencia] + ([col_nombre_producto] if col_nombre_producto and col_nombre_producto != col_referencia else [])
-                res_o = df_otros.groupby(g_cols, as_index=False).agg(
-                    Registros=(col_valor, "count"),
-                    Venta_Total=(col_valor, "sum"),
-                    Clientes=(col_cliente, "nunique"),
-                ).sort_values("Venta_Total", ascending=False)
+            st.subheader("🔎 Referencias asignadas a 'Otros' (Comparativa)")
+
+            df_otros_a = df_ma[df_ma["Marca Limpia"] == "Otros"].copy()
+            df_otros_p = df_mp[df_mp["Marca Limpia"] == "Otros"].copy()
+
+            if not df_otros_a.empty or not df_otros_p.empty:
+                g_cols = [col_referencia] + (
+                    [col_nombre_producto] if col_nombre_producto and col_nombre_producto != col_referencia else []
+                )
+
+                oa = (
+                    df_otros_a.groupby(g_cols, as_index=False)
+                    .agg(
+                        **{
+                            f"Venta {am}": (col_valor, "sum"),
+                            "Registros": (col_valor, "count"),
+                            "Clientes": (col_cliente, "nunique"),
+                        }
+                    )
+                )
+                op = (
+                    df_otros_p.groupby(g_cols, as_index=False)
+                    .agg(**{f"Venta {am_ant}": (col_valor, "sum")})
+                )
+
+                res_o = pd.merge(oa, op, on=g_cols, how="outer").fillna(0)
+                res_o["Variación ($)"] = res_o[f"Venta {am}"] - res_o[f"Venta {am_ant}"]
+                res_o["Variación (%)"] = ((res_o[f"Venta {am}"] / res_o[f"Venta {am_ant}"].replace(0, 1)) - 1) * 100
+                res_o["Registros"] = res_o["Registros"].astype(int)
+                res_o["Clientes"] = res_o["Clientes"].astype(int)
+                res_o = res_o.sort_values(f"Venta {am}", ascending=False)
+
+                cols_ord_o = g_cols + [
+                    f"Venta {am}",
+                    f"Venta {am_ant}",
+                    "Variación ($)",
+                    "Variación (%)",
+                    "Registros",
+                    "Clientes",
+                ]
+                res_o = res_o[cols_ord_o]
+
+                st.info(
+                    f"Se muestran **{len(res_o)}** referencias en **Otros** "
+                    f"(Venta {am}: **${res_o[f'Venta {am}'].sum():,.0f}** vs {am_ant}: **${res_o[f'Venta {am_ant}'].sum():,.0f}**)."
+                )
 
                 out = io.BytesIO()
                 with pd.ExcelWriter(out, engine="openpyxl") as writer:
-                    res_o.to_excel(writer, index=False, sheet_name="Otros")
+                    res_o.to_excel(writer, index=False, sheet_name="Otros_Comparativo")
                 st.download_button(
-                    "📥 Descargar 'Otros' (Excel)",
+                    "📥 Descargar 'Otros' Comparativo (Excel)",
                     data=out.getvalue(),
-                    file_name=f"referencias_otros_{am}.xlsx",
+                    file_name=f"referencias_otros_comparativo_{am}_vs_{am_ant}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="dl_otros_clean",
+                    key="dl_otros_comp",
                 )
-                st.dataframe(res_o.style.format({"Registros": "{:,.0f}", "Venta_Total": "${:,.0f}", "Clientes": "{:,.0f}"}), use_container_width=True)
+
+                st.dataframe(
+                    res_o.style.format({
+                        f"Venta {am}": "${:,.0f}",
+                        f"Venta {am_ant}": "${:,.0f}",
+                        "Variación ($)": "${:+,.0f}",
+                        "Variación (%)": "{:+.1f}%",
+                        "Registros": "{:,.0f}",
+                        "Clientes": "{:,.0f}",
+                    }).map(color_variacion, subset=["Variación ($)", "Variación (%)"]),
+                    use_container_width=True,
+                )
             else:
                 st.success("No hay referencias en 'Otros' para los filtros seleccionados.")
 

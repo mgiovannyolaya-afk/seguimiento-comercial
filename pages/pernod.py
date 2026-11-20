@@ -33,17 +33,71 @@ def _limpiar_clave(val):
 def _normalizar_texto(val):
     if pd.isna(val):
         return ""
-    txt = re.sub(r"[^a-z0-9\s]+", " ", str(val).lower())
+    txt = str(val).lower()
+    txt = (
+        txt.replace("á", "a")
+        .replace("é", "e")
+        .replace("í", "i")
+        .replace("ó", "o")
+        .replace("ú", "u")
+    )
+    txt = re.sub(r"[^a-z0-9\s]+", " ", txt)
     return re.sub(r"\s+", " ", txt).strip()
+
+
+def _es_desconocido_o_vacio(val):
+    if pd.isna(val):
+        return True
+    txt = _normalizar_texto(val)
+    return txt in {
+        "",
+        "nan",
+        "none",
+        "null",
+        "desconocido",
+        "sin marca",
+        "sin identificar",
+        "kv sin identificar",
+        "otros",
+    }
 
 
 def _limpiar_marca_visible(val):
     if pd.isna(val):
         return "Otros"
     txt = re.sub(r"\s+", " ", str(val).strip())
-    if txt == "" or txt.lower() in {"nan", "none", "null", "sin identificar", "kv sin identificar", "otros"}:
+    if _es_desconocido_o_vacio(txt):
         return "Otros"
     return txt
+
+
+def _clasificar_por_nombre(texto_norm):
+    """Clasifica una cadena ya normalizada según las marcas del portafolio."""
+    if not texto_norm:
+        return None
+
+    reglas = [
+        ("Ojo de Tigre", ["ojo de tigre", "tigre"]),
+        ("The Glenlivet", ["glenlivet", "glenliv", "founders", "caribean", "caribbean"]),
+        ("Chivas Regal", ["chivas", "12yo", "13yo", "18yo", "sherry", "chivas crist"]),
+        ("Something Special", ["something", "some", "specia"]),
+        ("Ballantine's", ["ballantine", "ballant", "ballan", "finest"]),
+        ("Olmeca", ["olmeca", "olme", "altos", "reposado", "blanco"]),
+        ("Avión", ["avion", "reserva", "reser cris"]),
+        ("Passport", ["passport", "passpor", "selection"]),
+        ("Absolut", ["absolut", "absolu", "vodka"]),
+        ("Dubonnet", ["dubonnet", "dubonne", "aperitivo"]),
+        ("Beefeater", ["beefeater", "beef"]),
+        ("Jameson", ["jameson", "jame"]),
+        ("Perrier-Jouët", ["perrier", "jouet"]),
+        ("Mumm", ["mumm"]),
+        ("Ricard", ["ricard"]),
+    ]
+
+    for marca_oficial, pistas in reglas:
+        if any(p in texto_norm for p in pistas):
+            return marca_oficial
+    return None
 
 
 def _detectar_columna(columnas, palabras_clave, fallback_idx=0):
@@ -83,7 +137,7 @@ def listar_hojas_xlsb():
     return hojas_ventas, hoja_ppto, hoja_marcas, motor
 
 
-@st.cache_data(show_spinner="Procesando datos seleccionados...")
+@st.cache_data(show_spinner="Procesando datos y clasificando marcas...")
 def cargar_datos_rapido(hojas_sel, hoja_ppto, hoja_marcas, motor):
     xls_path = "BV PERNOD TODA.xlsb"
     hojas_a_leer = list(hojas_sel) if hojas_sel else []
@@ -109,11 +163,19 @@ def cargar_datos_rapido(hojas_sel, hoja_ppto, hoja_marcas, motor):
     col_gerente = _detectar_columna(cols, ["Gerente Zona", "Gerente Unidad", "Supervisor", "Gerente"], 2)
     col_zona = _detectar_columna(cols, ["Código Zona", "Codigo Zona", "Cod Zona", "Id Zona"], 3)
     col_cliente = _detectar_columna(cols, ["Nombre Cliente", "Cliente", "Documento Cliente"], 4)
-    col_referencia = _detectar_columna(cols, ["Referencia", "Artículo", "Articulo", "SKU", "Producto", "Item", "Descripción Item", "Descripcion"], 5)
+    col_referencia = _detectar_columna(
+        cols,
+        ["Referencia", "Artículo", "Articulo", "SKU", "Producto", "Item", "Descripción Item", "Descripcion"],
+        5,
+    )
     col_nombre_producto = next(
         (
             c for c in cols
-            if any(k in _normalizar_texto(c) for k in ["nombre de producto", "nombre producto", "nombre del producto", "nombre item", "descripcion"])
+            if any(
+                k in _normalizar_texto(c)
+                for k in ["producto", "nombre de producto", "nombre producto", "nombre del producto", "nombre item", "descripcion"]
+            )
+            and c != col_referencia
         ),
         None,
     )
@@ -146,39 +208,34 @@ def cargar_datos_rapido(hojas_sel, hoja_ppto, hoja_marcas, motor):
         .map(lambda x: mapa_meses.get(x, x.capitalize()))
     )
 
-    mapa_exacto = {}
-    reglas_rapidas = [
-        ("Passport", ["passport", "passpor", "selection"]),
-        ("Olmeca", ["olmeca", "olme", "reposado", "blanco"]),
-        ("Absolut", ["absolut", "absolu", "vodka"]),
-        ("Dubonnet", ["dubonnet", "dubonne", "aperitivo"]),
-        ("Ballantine's", ["ballantine", "ballant", "ballan", "finest"]),
-        ("Chivas Regal", ["chivas", "12yo", "13yo", "18yo", "sherry"]),
-        ("The Glenlivet", ["glenlivet", "glenliv", "founders", "caribean", "caribbean"]),
-        ("Something Special", ["something", "some", "special"]),
-        ("Beefeater", ["beefeater", "beef"]),
-        ("Jameson", ["jameson", "jame"]),
-        ("Ojo de Tigre", ["ojo de tigre", "tigre"]),
-    ]
+    # Mapas desde la hoja MARCAS (Marca | EAN | Producto)
+    mapa_ean_marca = {}
+    mapa_prod_marca = {}
 
     if not df_marcas.empty:
         cm = df_marcas.columns.tolist()
-        m_marca = next((c for c in cm if "marca" in str(c).lower()), cm[0])
-        m_cod = next((c for c in cm if any(k in str(c).lower() for k in ["ean", "codigo", "código", "ref"])), None)
-        m_nom = next((c for c in cm if any(k in str(c).lower() for k in ["desc", "nombre", "prod"])), None)
+        m_marca = next((c for c in cm if "marca" in _normalizar_texto(c)), cm[0])
+        m_ean = next((c for c in cm if any(k in _normalizar_texto(c) for k in ["ean", "codigo", "ref"])), None)
+        m_prod = next((c for c in cm if any(k in _normalizar_texto(c) for k in ["producto", "nombre", "desc", "item"])), None)
 
         for _, row in df_marcas.iterrows():
-            marca_val = _limpiar_marca_visible(row[m_marca]) if pd.notna(row[m_marca]) else "Otros"
-            if marca_val == "Otros":
-                continue
-            if m_cod and pd.notna(row[m_cod]):
-                k = _limpiar_clave(row[m_cod])
-                if k:
-                    mapa_exacto[k] = marca_val
-            if m_nom and pd.notna(row[m_nom]):
-                k = _limpiar_clave(row[m_nom])
-                if k:
-                    mapa_exacto[k] = marca_val
+            marca_raw = row[m_marca] if m_marca in row else None
+            prod_raw = row[m_prod] if (m_prod and m_prod in row) else ""
+            ean_raw = row[m_ean] if (m_ean and m_ean in row) else ""
+
+            marca_resuelta = None
+            if not _es_desconocido_o_vacio(marca_raw):
+                marca_resuelta = _limpiar_marca_visible(marca_raw)
+            else:
+                marca_resuelta = _clasificar_por_nombre(_normalizar_texto(prod_raw))
+
+            if marca_resuelta and marca_resuelta != "Otros":
+                ke = _limpiar_clave(ean_raw)
+                kp = _limpiar_texto_clave = _limpiar_clave(prod_raw)
+                if ke and ke not in mapa_ean_marca:
+                    mapa_ean_marca[ke] = marca_resuelta
+                if kp and kp not in mapa_prod_marca:
+                    mapa_prod_marca[kp] = marca_resuelta
 
     serie_ref = df_ventas[col_referencia]
     serie_prod = df_ventas[col_nombre_producto] if col_nombre_producto else pd.Series([""] * len(df_ventas))
@@ -188,20 +245,23 @@ def cargar_datos_rapido(hojas_sel, hoja_ppto, hoja_marcas, motor):
     for r_val, p_val in zip(pares_unicos["r"], pares_unicos["p"]):
         kr = _limpiar_clave(r_val)
         kp = _limpiar_clave(p_val)
-        if kr in mapa_exacto:
-            mapa_par[(r_val, p_val)] = _limpiar_marca_visible(mapa_exacto[kr])
+
+        if kr and kr in mapa_ean_marca:
+            mapa_par[(r_val, p_val)] = mapa_ean_marca[kr]
             continue
-        if kp in mapa_exacto:
-            mapa_par[(r_val, p_val)] = _limpiar_marca_visible(mapa_exacto[kp])
+        if kp and kp in mapa_ean_marca:
+            mapa_par[(r_val, p_val)] = mapa_ean_marca[kp]
+            continue
+        if kp and kp in mapa_prod_marca:
+            mapa_par[(r_val, p_val)] = mapa_prod_marca[kp]
+            continue
+        if kr and kr in mapa_prod_marca:
+            mapa_par[(r_val, p_val)] = mapa_prod_marca[kr]
             continue
 
-        texto = _normalizar_texto(f"{p_val} {r_val}")
-        asignada = "Otros"
-        for marca_nom, pistas in reglas_rapidas:
-            if any(p in texto for p in pistas):
-                asignada = _limpiar_marca_visible(marca_nom)
-                break
-        mapa_par[(r_val, p_val)] = asignada
+        texto_combinado = _normalizar_texto(f"{p_val} {r_val}")
+        detectada = _clasificar_por_nombre(texto_combinado)
+        mapa_par[(r_val, p_val)] = detectada if detectada else "Otros"
 
     df_ventas["Marca Estrategica"] = [
         _limpiar_marca_visible(mapa_par[(r, p)]) for r, p in zip(serie_ref, serie_prod)

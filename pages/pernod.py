@@ -178,12 +178,24 @@ def cargar_datos_rapido(hojas_sel, hoja_ppto, hoja_marcas, motor):
         ),
         None,
     )
+    col_unidades = next(
+        (
+            c for c in cols
+            if any(
+                k in _normalizar_texto(c)
+                for k in ["unidades", "unidad", "cantidad", "cant", "und", "cajas"]
+            )
+        ),
+        None,
+    )
     col_anio = _detectar_columna(cols, ["Año", "Anio", "Year"], 6)
     col_mes = _detectar_columna(cols, ["Mes", "Month"], 7)
     col_valor = _detectar_columna(cols, ["Ventas Det", "Venta", "Valor", "Total"], 8)
 
     df_ventas[col_valor] = pd.to_numeric(df_ventas[col_valor], errors="coerce").fillna(0)
     df_ventas[col_anio] = pd.to_numeric(df_ventas[col_anio], errors="coerce").fillna(0).astype(int)
+    if col_unidades:
+        df_ventas[col_unidades] = pd.to_numeric(df_ventas[col_unidades], errors="coerce").fillna(0)
 
     mapa_meses = {
         "ene": "Ene", "enero": "Ene", "1": "Ene", "01": "Ene",
@@ -276,6 +288,7 @@ def cargar_datos_rapido(hojas_sel, hoja_ppto, hoja_marcas, motor):
         "col_cliente": col_cliente,
         "col_referencia": col_referencia,
         "col_nombre_producto": col_nombre_producto,
+        "col_unidades": col_unidades,
         "col_anio": col_anio,
         "col_mes": col_mes,
         "col_valor": col_valor,
@@ -305,6 +318,7 @@ try:
     col_cliente = meta["col_cliente"]
     col_referencia = meta["col_referencia"]
     col_nombre_producto = meta["col_nombre_producto"]
+    col_unidades = meta["col_unidades"]
     col_anio = meta["col_anio"]
     col_mes = meta["col_mes"]
     col_valor = meta["col_valor"]
@@ -557,13 +571,15 @@ try:
             venta_total_periodo = df_ma[col_valor].sum()
             total_clientes_periodo = df_ma[df_ma[col_valor] > 0][col_cliente].nunique()
 
-            # Tabla comparativa principal por Marca Estratégica (sin columna duplicada de Peso Total)
             ma = (
                 df_ma.groupby("Marca Limpia", as_index=False)
                 .agg(
                     **{
                         f"Venta {am}": (col_valor, "sum"),
-                        "Clientes": (col_cliente, lambda s: df_ma.loc[s.index][df_ma.loc[s.index, col_valor] > 0][col_cliente].nunique()),
+                        "Clientes": (
+                            col_cliente,
+                            lambda s: df_ma.loc[s.index][df_ma.loc[s.index, col_valor] > 0][col_cliente].nunique(),
+                        ),
                     }
                 )
             )
@@ -634,23 +650,22 @@ try:
                     [col_nombre_producto] if col_nombre_producto and col_nombre_producto != col_referencia else []
                 )
 
-                oa = (
-                    df_otros_a.groupby(g_cols, as_index=False)
-                    .agg(
-                        **{
-                            f"Venta {am}": (col_valor, "sum"),
-                            "Registros": (col_valor, "count"),
-                            "Clientes": (col_cliente, lambda s: df_otros_a.loc[s.index][df_otros_a.loc[s.index, col_valor] > 0][col_cliente].nunique()),
-                        }
-                    )
-                )
-                op = (
-                    df_otros_p.groupby(g_cols, as_index=False)
-                    .agg(**{f"Venta {am_ant}": (col_valor, "sum")})
-                )
+                agg_dict_oa = {
+                    f"Venta {am}": (col_valor, "sum"),
+                    "Registros": (col_valor, "count"),
+                    "Unidades": (col_unidades, "sum") if col_unidades else (col_valor, lambda s: 0),
+                    "Clientes": (
+                        col_cliente,
+                        lambda s: df_otros_a.loc[s.index][df_otros_a.loc[s.index, col_valor] > 0][col_cliente].nunique(),
+                    ),
+                }
+
+                oa = df_otros_a.groupby(g_cols, as_index=False).agg(**agg_dict_oa)
+                op = df_otros_p.groupby(g_cols, as_index=False).agg(**{f"Venta {am_ant}": (col_valor, "sum")})
 
                 res_o = pd.merge(oa, op, on=g_cols, how="outer").fillna(0)
                 res_o["Registros"] = res_o["Registros"].astype(int)
+                res_o["Unidades"] = res_o["Unidades"].round(0).astype(int)
                 res_o["Clientes"] = res_o["Clientes"].astype(int)
                 res_o["Participación (%)"] = (res_o[f"Venta {am}"] / venta_total_periodo * 100) if venta_total_periodo > 0 else 0
                 res_o["Cobertura (%)"] = (res_o["Clientes"] / total_clientes_periodo * 100) if total_clientes_periodo > 0 else 0
@@ -680,6 +695,7 @@ try:
                     "Variación ($)",
                     "Variación (%)",
                     "Registros",
+                    "Unidades",
                     "Clientes",
                 ]
                 res_o_vista = res_o_vista[cols_ord_o]
@@ -710,6 +726,7 @@ try:
                         "Variación ($)": "${:+,.0f}",
                         "Variación (%)": "{:+.1f}%",
                         "Registros": "{:,.0f}",
+                        "Unidades": "{:,.0f}",
                         "Clientes": "{:,.0f}",
                     }).map(color_variacion, subset=["Variación ($)", "Variación (%)"]),
                     use_container_width=True,

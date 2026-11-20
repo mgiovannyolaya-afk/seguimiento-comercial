@@ -251,8 +251,12 @@ try:
                         actuales.add(_normalizar_texto_busqueda(p))
                     pistas_por_marca[mc] = sorted([p for p in actuales if p], key=len, reverse=True)
 
-    marcas_conocidas = sorted(set(marcas_conocidas), key=len, reverse=True)
-    marca_respaldo_final = marcas_conocidas[0] if marcas_conocidas else "Pernod Ricard"
+    marcas_conocidas = sorted(
+        [m for m in set(marcas_conocidas) if _normalizar_texto_busqueda(m) != "otros"],
+        key=len,
+        reverse=True,
+    )
+    marca_respaldo_final = "Otros"
 
     def _buscar_marca_por_texto(texto_norm):
         if not texto_norm:
@@ -283,7 +287,7 @@ try:
                             if r2 > mejor_ratio:
                                 mejor_ratio = r2
                                 mejor_mc = mc
-        if mejor_mc and mejor_ratio >= 0.72:
+        if mejor_mc and mejor_ratio >= 0.78:
             return mejor_mc
         return None
 
@@ -313,9 +317,9 @@ try:
             return marca_detectada, "Asignada por nombre de producto"
 
         if es_kv:
-            return marca_respaldo_final, "KV asignado a marca (respaldo)"
+            return marca_respaldo_final, "KV asignado a Otros"
 
-        return marca_respaldo_final, "Asignada a marca (respaldo)"
+        return marca_respaldo_final, "Clasificada en Otros"
 
     res_marcas = df.apply(resolver_marca_y_estado, axis=1)
     df["Marca Estrategica"] = [r[0] for r in res_marcas]
@@ -987,17 +991,17 @@ try:
             )
 
             st.markdown("---")
-            st.subheader("🔎 Referencias asignadas por aproximación o respaldo")
-            df_pend = df_m_act[df_m_act["Estado Cruce Marca"].str.contains("respaldo", case=False, na=False)].copy()
+            st.subheader("🔎 Referencias asignadas a 'Otros'")
+            df_otros = df_m_act[df_m_act["Marca Estrategica"] == "Otros"].copy()
 
-            if not df_pend.empty:
-                cols_group_pend = [col_referencia]
+            if not df_otros.empty:
+                cols_group_otros = [col_referencia]
                 if col_nombre_producto and col_nombre_producto != col_referencia:
-                    cols_group_pend.append(col_nombre_producto)
-                cols_group_pend.extend(["Marca Estrategica", "Estado Cruce Marca"])
+                    cols_group_otros.append(col_nombre_producto)
+                cols_group_otros.extend(["Marca Estrategica", "Estado Cruce Marca"])
 
-                resumen_pend = (
-                    df_pend.groupby(cols_group_pend, as_index=False)
+                resumen_otros = (
+                    df_otros.groupby(cols_group_otros, as_index=False)
                     .agg(
                         Registros=(col_valor, "count"),
                         Venta_Total=(col_valor, "sum"),
@@ -1005,21 +1009,21 @@ try:
                     )
                     .sort_values(by="Venta_Total", ascending=False)
                 )
-                st.info(f"Todas las referencias están asignadas a una marca. Se muestran **{len(resumen_pend)}** referencias asignadas por respaldo (total **${resumen_pend['Venta_Total'].sum():,.0f}**).")
+                st.info(f"Se muestran **{len(resumen_otros)}** referencias agrupadas en **Otros** (total **${resumen_otros['Venta_Total'].sum():,.0f}**).")
 
-                out_kv = io.BytesIO()
-                with pd.ExcelWriter(out_kv, engine="openpyxl") as writer_kv:
-                    resumen_pend.to_excel(writer_kv, index=False, sheet_name="Asignadas_Respaldo")
+                out_otros = io.BytesIO()
+                with pd.ExcelWriter(out_otros, engine="openpyxl") as writer_otros:
+                    resumen_otros.to_excel(writer_otros, index=False, sheet_name="Categoria_Otros")
                 st.download_button(
-                    label="📥 Descargar referencias por respaldo (Excel)",
-                    data=out_kv.getvalue(),
-                    file_name=f"referencias_respaldo_{anio_m}.xlsx",
+                    label="📥 Descargar referencias en Otros (Excel)",
+                    data=out_otros.getvalue(),
+                    file_name=f"referencias_otros_{anio_m}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="dl_kv_excel",
+                    key="dl_otros_excel",
                 )
 
                 st.dataframe(
-                    resumen_pend.style.format({
+                    resumen_otros.style.format({
                         "Registros": "{:,.0f}",
                         "Venta_Total": "${:,.0f}",
                         "Clientes_Unicos": "{:,.0f}",
@@ -1027,7 +1031,7 @@ try:
                     use_container_width=True,
                 )
             else:
-                st.success("¡Listo! Todas las referencias y KV quedaron clasificadas directamente en su marca.")
+                st.success("No hay referencias en 'Otros' para los filtros seleccionados.")
 
     with tab5:
         st.subheader("🔍 Detalle de Clientes y Referencias")

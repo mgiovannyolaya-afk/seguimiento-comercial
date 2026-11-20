@@ -304,12 +304,11 @@ try:
                 return "color: #C62828; font-weight: bold;"
         return ""
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4 = st.tabs([
         "📊 Dashboard General & Clientes",
         "📦 Análisis de Referencias (YoY)",
         "🎯 Presupuesto & Zonas (PPTO)",
         "🍾 Análisis por Marcas & KV",
-        "🔍 Detalle Clientes y Referencias",
     ])
 
     anios_disp = sorted([int(x) for x in df_f[col_anio].dropna().unique() if x > 0])
@@ -558,10 +557,6 @@ try:
                 st.dataframe(res_o.style.format({"Registros": "{:,.0f}", "Venta_Total": "${:,.0f}", "Clientes": "{:,.0f}"}), use_container_width=True)
             else:
                 st.success("No hay referencias en 'Otros' para los filtros seleccionados.")
-
-    with tab5:
-        st.subheader("🔍 Detalle de Clientes y Referencias")
-        st.dataframe(df_f.head(1500), use_container_width=True, height=420)
 
 except Exception as e:
     st.error(f"Error al cargar los datos: {e}")

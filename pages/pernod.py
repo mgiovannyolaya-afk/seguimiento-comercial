@@ -1,24 +1,26 @@
-import streamlit as st
-import pandas as pd
-import plotly.express as px
-from datetime import datetime
-import calendar
+import hashlib
 import io
 import os
-import hashlib
+import pandas as pd
+import plotly.express as px
+import streamlit as st
 
 st.set_page_config(page_title="SEGUIMIENTO PERNOD RICARD", layout="wide")
 
-st.markdown("""
+st.markdown(
+    """
     <style>
         [data-testid="stMetricValue"] {
             font-size: 1.35rem !important;
         }
     </style>
-""", unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True,
+)
 
 st.title("🍾 SEGUIMIENTO PERNOD RICARD 🥂")
 st.markdown("---")
+
 
 def _firma_archivo(ruta):
     if not os.path.exists(ruta):
@@ -30,13 +32,17 @@ def _firma_archivo(ruta):
             h.update(chunk)
     return f"{stat.st_size}-{stat.st_mtime_ns}-{h.hexdigest()}"
 
+
 @st.cache_data
 def cargar_datos(firma=""):
     xls_path = "BV PERNOD TODA.xlsb"
     xl = pd.ExcelFile(xls_path, engine="pyxlsb")
     nombres_hojas = xl.sheet_names
 
-    nombre_ppto_real = next((h for h in nombres_hojas if 'ppto' in str(h).lower()), nombres_hojas[1] if len(nombres_hojas) > 1 else None)
+    nombre_ppto_real = next(
+        (h for h in nombres_hojas if "ppto" in str(h).lower()),
+        nombres_hojas[1] if len(nombres_hojas) > 1 else None,
+    )
     hojas_ventas = [h for h in nombres_hojas if h != nombre_ppto_real]
     if not hojas_ventas:
         hojas_ventas = [nombres_hojas[0]]
@@ -45,11 +51,16 @@ def cargar_datos(firma=""):
     df_ventas = pd.concat(dfs_ventas, ignore_index=True)
 
     try:
-        df_ppto = pd.read_excel(xl, sheet_name=nombre_ppto_real, engine="pyxlsb") if nombre_ppto_real is not None else pd.DataFrame()
+        df_ppto = (
+            pd.read_excel(xl, sheet_name=nombre_ppto_real, engine="pyxlsb")
+            if nombre_ppto_real is not None
+            else pd.DataFrame()
+        )
     except Exception:
         df_ppto = pd.DataFrame()
 
     return df_ventas, df_ppto
+
 
 try:
     df, df_ppto = cargar_datos(_firma_archivo("BV PERNOD TODA.xlsb"))
@@ -66,32 +77,32 @@ try:
                     return col
         return columnas[fallback_idx] if fallback_idx < len(columnas) else columnas[0]
 
-    col_regional = detectar_columna(['Código UN', 'Cod UN', 'Regional', 'Región'], 1)
-    col_canal = detectar_columna(['Tipo de Cliente', 'Tipo cliente', 'Canal', 'Canal de Venta'], 0)
-    col_gerente = detectar_columna(['Gerente Zona', 'Gerente Unidad', 'Supervisor', 'Gerente'], 2)
-    col_zona = detectar_columna(['Código Zona', 'Codigo Zona', 'Cod Zona', 'Id Zona'], 3)
-    col_cliente = detectar_columna(['Nombre Cliente', 'Cliente', 'Documento Cliente'], 4)
-    col_referencia = detectar_columna(['Referencia', 'Artículo', 'Articulo', 'SKU', 'Producto', 'Item', 'Descripción Item'], 5)
-    col_anio = detectar_columna(['Año', 'Anio', 'Year'], 6)
-    col_mes = detectar_columna(['Mes', 'Month'], 7)
-    col_valor = detectar_columna(['Ventas Det', 'Venta', 'Valor', 'Total'], 8)
+    col_regional = detectar_columna(["Código UN", "Cod UN", "Regional", "Región"], 1)
+    col_canal = detectar_columna(["Tipo de Cliente", "Tipo cliente", "Canal", "Canal de Venta"], 0)
+    col_gerente = detectar_columna(["Gerente Zona", "Gerente Unidad", "Supervisor", "Gerente"], 2)
+    col_zona = detectar_columna(["Código Zona", "Codigo Zona", "Cod Zona", "Id Zona"], 3)
+    col_cliente = detectar_columna(["Nombre Cliente", "Cliente", "Documento Cliente"], 4)
+    col_referencia = detectar_columna(["Referencia", "Artículo", "Articulo", "SKU", "Producto", "Item", "Descripción Item"], 5)
+    col_anio = detectar_columna(["Año", "Anio", "Year"], 6)
+    col_mes = detectar_columna(["Mes", "Month"], 7)
+    col_valor = detectar_columna(["Ventas Det", "Venta", "Valor", "Total"], 8)
 
-    df[col_valor] = pd.to_numeric(df[col_valor], errors='coerce').fillna(0)
-    df[col_anio] = pd.to_numeric(df[col_anio], errors='coerce').fillna(0).astype(int)
+    df[col_valor] = pd.to_numeric(df[col_valor], errors="coerce").fillna(0)
+    df[col_anio] = pd.to_numeric(df[col_anio], errors="coerce").fillna(0).astype(int)
 
     mapa_meses = {
-        'ene': 'Ene', 'enero': 'Ene', '1': 'Ene', '01': 'Ene',
-        'feb': 'Feb', 'febrero': 'Feb', '2': 'Feb', '02': 'Feb',
-        'mar': 'Mar', 'marzo': 'Mar', '3': 'Mar', '03': 'Mar',
-        'abr': 'Abr', 'abril': 'Abr', '4': 'Abr', '04': 'Abr',
-        'may': 'May', 'mayo': 'May', '5': 'May', '05': 'May',
-        'jun': 'Jun', 'junio': 'Jun', '6': 'Jun', '06': 'Jun',
-        'jul': 'Jul', 'julio': 'Jul', '7': 'Jul', '07': 'Jul',
-        'ago': 'Ago', 'agosto': 'Ago', '8': 'Ago', '08': 'Ago',
-        'sep': 'Sep', 'sept': 'Sep', 'septiembre': 'Sep', '9': 'Sep', '09': 'Sep',
-        'oct': 'Oct', 'octubre': 'Oct', '10': 'Oct',
-        'nov': 'Nov', 'noviembre': 'Nov', '11': 'Nov',
-        'dic': 'Dic', 'diciembre': 'Dic', '12': 'Dic'
+        "ene": "Ene", "enero": "Ene", "1": "Ene", "01": "Ene",
+        "feb": "Feb", "febrero": "Feb", "2": "Feb", "02": "Feb",
+        "mar": "Mar", "marzo": "Mar", "3": "Mar", "03": "Mar",
+        "abr": "Abr", "abril": "Abr", "4": "Abr", "04": "Abr",
+        "may": "May", "mayo": "May", "5": "May", "05": "May",
+        "jun": "Jun", "junio": "Jun", "6": "Jun", "06": "Jun",
+        "jul": "Jul", "julio": "Jul", "7": "Jul", "07": "Jul",
+        "ago": "Ago", "agosto": "Ago", "8": "Ago", "08": "Ago",
+        "sep": "Sep", "sept": "Sep", "septiembre": "Sep", "9": "Sep", "09": "Sep",
+        "oct": "Oct", "octubre": "Oct", "10": "Oct",
+        "nov": "Nov", "noviembre": "Nov", "11": "Nov",
+        "dic": "Dic", "diciembre": "Dic", "12": "Dic",
     }
     df[col_mes] = (
         df[col_mes]
@@ -129,16 +140,17 @@ try:
         df_f_global = df_f_global[df_f_global[col_zona].astype(str) == sel_zona]
 
     tab1, tab2, tab3, tab4 = st.tabs([
-        "📊 Dashboard General & Clientes", 
-        "📦 Análisis de Referencias (YoY)", 
+        "📊 Dashboard General & Clientes",
+        "📦 Análisis de Referencias (YoY)",
         "🎯 Presupuesto & Zonas (PPTO)",
-        "🔍 Detalle Clientes y Referencias"
+        "🔍 Detalle Clientes y Referencias",
     ])
 
     orden_meses_ref = [
         "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
-        "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+        "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
     ]
+
     def obtener_peso_mes(m):
         m_lower = str(m).strip().lower()
         for idx, ref in enumerate(orden_meses_ref):
@@ -149,18 +161,21 @@ try:
     def color_variacion(val):
         try:
             if isinstance(val, (int, float)):
-                if val > 0: return 'color: #2E7D32; font-weight: bold;'
-                elif val < 0: return 'color: #C62828; font-weight: bold;'
-        except: pass
-        return ''
+                if val > 0:
+                    return "color: #2E7D32; font-weight: bold;"
+                elif val < 0:
+                    return "color: #C62828; font-weight: bold;"
+        except Exception:
+            pass
+        return ""
 
     with tab1:
         st.subheader("📅 Panel de Control Temporal")
         col_f1, col_f2 = st.columns([1, 3])
-        
+
         with col_f1:
             anios_disp = sorted([int(x) for x in df_f[col_anio].dropna().unique() if x > 0])
-            anio_base = st.selectbox("Selecciona el Año Base:", anios_disp, index=len(anios_disp)-1 if anios_disp else 0, key="anio_tab1")
+            anio_base = st.selectbox("Selecciona el Año Base:", anios_disp, index=len(anios_disp) - 1 if anios_disp else 0, key="anio_tab1")
 
         with col_f2:
             meses_unicos = df_f[col_mes].dropna().unique()
@@ -196,20 +211,24 @@ try:
             st.markdown("---")
             st.subheader("📈 Tendencia Mensual de Ventas (YoY)")
             df_tend_act = df_f[df_f[col_anio] == anio_sel].groupby(col_mes)[col_valor].sum().reset_index()
-            df_tend_act['Año'] = str(anio_sel)
+            df_tend_act["Año"] = str(anio_sel)
             df_tend_ant = df_f[df_f[col_anio] == anio_anterior].groupby(col_mes)[col_valor].sum().reset_index()
-            df_tend_ant['Año'] = str(anio_anterior)
-            
+            df_tend_ant["Año"] = str(anio_anterior)
+
             df_tendencia = pd.concat([df_tend_act, df_tend_ant])
-            df_tendencia['Mes_Orden'] = df_tendencia[col_mes].apply(obtener_peso_mes)
-            df_tendencia = df_tendencia.sort_values(by='Mes_Orden')
+            df_tendencia["Mes_Orden"] = df_tendencia[col_mes].apply(obtener_peso_mes)
+            df_tendencia = df_tendencia.sort_values(by="Mes_Orden")
 
             if not df_tendencia.empty:
                 fig_tend = px.line(
-                    df_tendencia, x=col_mes, y=col_valor, color='Año', markers=True,
-                    color_discrete_map={str(anio_sel): '#0066cc', str(anio_anterior): '#94a3b8'}
+                    df_tendencia,
+                    x=col_mes,
+                    y=col_valor,
+                    color="Año",
+                    markers=True,
+                    color_discrete_map={str(anio_sel): "#0066cc", str(anio_anterior): "#94a3b8"},
                 )
-                fig_tend.update_traces(hovertemplate='<b>Mes:</b> %{x}<br><b>Venta:</b> $%{y:,.0f}<extra></extra>')
+                fig_tend.update_traces(hovertemplate="<b>Mes:</b> %{x}<br><b>Venta:</b> $%{y:,.0f}<extra></extra>")
                 fig_tend.update_layout(xaxis_title="Mes", yaxis_title="Venta Total ($)", legend_title="Año", height=350, margin=dict(l=0, r=0, t=20, b=0))
                 st.plotly_chart(fig_tend, use_container_width=True)
 
@@ -218,33 +237,41 @@ try:
             df_global_actual = df_f_global[(df_f_global[col_anio] == anio_sel) & (df_f_global[col_mes].isin(meses_sel))]
             df_global_ant = df_f_global[(df_f_global[col_anio] == anio_anterior) & (df_f_global[col_mes].isin(meses_sel))]
 
-            reg_actual = df_global_actual.groupby(col_regional)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_sel}'})
-            reg_ant = df_global_ant.groupby(col_regional)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_anterior}'})
+            reg_actual = df_global_actual.groupby(col_regional)[col_valor].sum().reset_index().rename(columns={col_valor: f"Venta {anio_sel}"})
+            reg_ant = df_global_ant.groupby(col_regional)[col_valor].sum().reset_index().rename(columns={col_valor: f"Venta {anio_anterior}"})
 
-            tabla_un_final = pd.merge(reg_actual, reg_ant, on=col_regional, how='outer').fillna(0)
-            tabla_un_final['Variación ($)'] = tabla_un_final[f'Venta {anio_sel}'] - tabla_un_final[f'Venta {anio_anterior}']
-            tabla_un_final['Variación (%)'] = ((tabla_un_final[f'Venta {anio_sel}'] / tabla_un_final[f'Venta {anio_anterior}'].replace(0, 1)) - 1) * 100
-            tabla_un_final['Crecimiento_Tipo'] = tabla_un_final['Variación (%)'].apply(lambda x: 'Crecimiento' if x >= 0 else 'Decrecimiento')
+            tabla_un_final = pd.merge(reg_actual, reg_ant, on=col_regional, how="outer").fillna(0)
+            tabla_un_final["Variación ($)"] = tabla_un_final[f"Venta {anio_sel}"] - tabla_un_final[f"Venta {anio_anterior}"]
+            tabla_un_final["Variación (%)"] = ((tabla_un_final[f"Venta {anio_sel}"] / tabla_un_final[f"Venta {anio_anterior}"].replace(0, 1)) - 1) * 100
+            tabla_un_final["Crecimiento_Tipo"] = tabla_un_final["Variación (%)"].apply(lambda x: "Crecimiento" if x >= 0 else "Decrecimiento")
 
             col_vis1, col_vis2 = st.columns([1.2, 1])
             with col_vis1:
                 fig_un_vis = px.bar(
-                    tabla_un_final.sort_values(by='Variación (%)', ascending=True),
-                    x='Variación (%)', y=col_regional, orientation='h',
-                    color='Crecimiento_Tipo', color_discrete_map={'Crecimiento': '#2E7D32', 'Decrecimiento': '#C62828'},
-                    text=tabla_un_final.sort_values(by='Variación (%)', ascending=True)['Variación (%)'].apply(lambda x: f"{x:,.0f}%")
+                    tabla_un_final.sort_values(by="Variación (%)", ascending=True),
+                    x="Variación (%)",
+                    y=col_regional,
+                    orientation="h",
+                    color="Crecimiento_Tipo",
+                    color_discrete_map={"Crecimiento": "#2E7D32", "Decrecimiento": "#C62828"},
+                    text=tabla_un_final.sort_values(by="Variación (%)", ascending=True)["Variación (%)"].apply(lambda x: f"{x:,.0f}%"),
                 )
-                fig_un_vis.update_traces(textposition='outside', hovertemplate='<b>%{y}</b><br>Variación: %{x:,.1f}%<extra></extra>')
+                fig_un_vis.update_traces(textposition="outside", hovertemplate="<b>%{y}</b><br>Variación: %{x:,.1f}%<extra></extra>")
                 fig_un_vis.update_layout(xaxis_title="Variación (%)", yaxis_title="", showlegend=False, height=300, margin=dict(l=0, r=0, t=10, b=0))
                 st.plotly_chart(fig_un_vis, use_container_width=True)
 
             with col_vis2:
-                format_dict_un = {f'Venta {anio_sel}': '${:,.0f}', f'Venta {anio_anterior}': '${:,.0f}', 'Variación ($)': '${:,.0f}', 'Variación (%)': '{:,.0f}%'}
+                format_dict_un = {
+                    f"Venta {anio_sel}": "${:,.0f}",
+                    f"Venta {anio_anterior}": "${:,.0f}",
+                    "Variación ($)": "${:,.0f}",
+                    "Variación (%)": "{:,.0f}%",
+                }
                 tabla_un_estilizada = (
-                    tabla_un_final.sort_values(by=f'Venta {anio_sel}', ascending=False).style
-                    .format(format_dict_un)
-                    .map(color_variacion, subset=['Variación ($)', 'Variación (%)'])
-                    .hide(subset=['Crecimiento_Tipo'], axis='columns')
+                    tabla_un_final.sort_values(by=f"Venta {anio_sel}", ascending=False)
+                    .style.format(format_dict_un)
+                    .map(color_variacion, subset=["Variación ($)", "Variación (%)"])
+                    .hide(subset=["Crecimiento_Tipo"], axis="columns")
                 )
                 st.dataframe(tabla_un_estilizada, use_container_width=True, height=280)
 
@@ -254,51 +281,54 @@ try:
                 st.subheader(f"📊 Ventas por Regional ({anio_sel})")
                 if not df_actual.empty:
                     df_reg = df_actual.groupby(col_regional)[col_valor].sum().reset_index().sort_values(by=col_valor, ascending=False).head(10)
-                    df_reg['Texto_Moneda'] = df_reg[col_valor].apply(lambda x: f"${x:,.0f}")
-                    fig_reg = px.bar(df_reg, x=col_valor, y=col_regional, orientation='h', text='Texto_Moneda', color=col_valor, color_continuous_scale='Blues')
-                    fig_reg.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>')
-                    fig_reg.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False, xaxis_title="Venta ($)", yaxis_title="Regional")
+                    df_reg["Texto_Moneda"] = df_reg[col_valor].apply(lambda x: f"${x:,.0f}")
+                    fig_reg = px.bar(df_reg, x=col_valor, y=col_regional, orientation="h", text="Texto_Moneda", color=col_valor, color_continuous_scale="Blues")
+                    fig_reg.update_traces(texttemplate="%{text}", textposition="auto", hovertemplate="<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>")
+                    fig_reg.update_layout(yaxis={"categoryorder": "total ascending"}, showlegend=False, xaxis_title="Venta ($)", yaxis_title="Regional")
                     st.plotly_chart(fig_reg, use_container_width=True)
-                else: st.info("Sin datos.")
+                else:
+                    st.info("Sin datos.")
 
             with col_g2:
                 st.subheader("🏆 Top Clientes")
                 if not df_actual.empty:
                     df_cli_top = df_actual.groupby(col_cliente)[col_valor].sum().reset_index().sort_values(by=col_valor, ascending=False).head(10)
-                    df_cli_top['Texto_Moneda'] = df_cli_top[col_valor].apply(lambda x: f"${x:,.0f}")
-                    fig_cli = px.bar(df_cli_top, x=col_valor, y=col_cliente, orientation='h', text='Texto_Moneda', color=col_valor, color_continuous_scale='Greens')
-                    fig_cli.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>')
-                    fig_cli.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False, xaxis_title="Venta ($)", yaxis_title="Cliente")
+                    df_cli_top["Texto_Moneda"] = df_cli_top[col_valor].apply(lambda x: f"${x:,.0f}")
+                    fig_cli = px.bar(df_cli_top, x=col_valor, y=col_cliente, orientation="h", text="Texto_Moneda", color=col_valor, color_continuous_scale="Greens")
+                    fig_cli.update_traces(texttemplate="%{text}", textposition="auto", hovertemplate="<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>")
+                    fig_cli.update_layout(yaxis={"categoryorder": "total ascending"}, showlegend=False, xaxis_title="Venta ($)", yaxis_title="Cliente")
                     st.plotly_chart(fig_cli, use_container_width=True)
-                else: st.info("Sin datos.")
+                else:
+                    st.info("Sin datos.")
 
             st.markdown("---")
             st.subheader("📋 Detalle Avanzado por Cliente (Ventas, Ticket Promedio y Portafolio)")
             col_busq, col_desc = st.columns([3, 1])
-            with col_busq: busqueda_tabla = st.text_input("🔍 Buscar cliente:", "", key="busq_cli_tab1")
+            with col_busq:
+                busqueda_tabla = st.text_input("🔍 Buscar cliente:", "", key="busq_cli_tab1")
 
-            ventas_actual = df_actual.groupby(col_cliente)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_sel}'})
-            ventas_anterior = df_ant.groupby(col_cliente)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_anterior}'})
-            
-            pedidos_act = df_actual.groupby(col_cliente).size().reset_index(name='Pedidos_Act')
-            pedidos_ant = df_ant.groupby(col_cliente).size().reset_index(name='Pedidos_Ant')
-            skus_act = df_actual[df_actual[col_valor] > 0].groupby(col_cliente)[col_referencia].nunique().reset_index(name='Portafolio (SKUs)')
+            ventas_actual = df_actual.groupby(col_cliente)[col_valor].sum().reset_index().rename(columns={col_valor: f"Venta {anio_sel}"})
+            ventas_anterior = df_ant.groupby(col_cliente)[col_valor].sum().reset_index().rename(columns={col_valor: f"Venta {anio_anterior}"})
 
-            tabla_final = pd.merge(ventas_actual, ventas_anterior, on=col_cliente, how='outer').fillna(0)
-            tabla_final = pd.merge(tabla_final, pedidos_act, on=col_cliente, how='left').fillna(1)
-            tabla_final = pd.merge(tabla_final, pedidos_ant, on=col_cliente, how='left').fillna(1)
-            tabla_final = pd.merge(tabla_final, skus_act, on=col_cliente, how='left').fillna(0)
+            pedidos_act = df_actual.groupby(col_cliente).size().reset_index(name="Pedidos_Act")
+            pedidos_ant = df_ant.groupby(col_cliente).size().reset_index(name="Pedidos_Ant")
+            skus_act = df_actual[df_actual[col_valor] > 0].groupby(col_cliente)[col_referencia].nunique().reset_index(name="Portafolio (SKUs)")
 
-            tabla_final[f'Ticket Prom. {anio_sel}'] = tabla_final[f'Venta {anio_sel}'] / tabla_final['Pedidos_Act']
-            tabla_final[f'Ticket Prom. {anio_anterior}'] = tabla_final[f'Venta {anio_anterior}'] / tabla_final['Pedidos_Ant']
-            tabla_final['Variación ($)'] = tabla_final[f'Venta {anio_sel}'] - tabla_final[f'Venta {anio_anterior}']
-            tabla_final['Variación (%)'] = ((tabla_final[f'Venta {anio_sel}'] / tabla_final[f'Venta {anio_anterior}'].replace(0, 1)) - 1) * 100
+            tabla_final = pd.merge(ventas_actual, ventas_anterior, on=col_cliente, how="outer").fillna(0)
+            tabla_final = pd.merge(tabla_final, pedidos_act, on=col_cliente, how="left").fillna(1)
+            tabla_final = pd.merge(tabla_final, pedidos_ant, on=col_cliente, how="left").fillna(1)
+            tabla_final = pd.merge(tabla_final, skus_act, on=col_cliente, how="left").fillna(0)
+
+            tabla_final[f"Ticket Prom. {anio_sel}"] = tabla_final[f"Venta {anio_sel}"] / tabla_final["Pedidos_Act"]
+            tabla_final[f"Ticket Prom. {anio_anterior}"] = tabla_final[f"Venta {anio_anterior}"] / tabla_final["Pedidos_Ant"]
+            tabla_final["Variación ($)"] = tabla_final[f"Venta {anio_sel}"] - tabla_final[f"Venta {anio_anterior}"]
+            tabla_final["Variación (%)"] = ((tabla_final[f"Venta {anio_sel}"] / tabla_final[f"Venta {anio_anterior}"].replace(0, 1)) - 1) * 100
 
             cols_mostrar = [
-                col_cliente, f'Venta {anio_sel}', f'Venta {anio_anterior}', 
-                'Variación ($)', 'Variación (%)', f'Ticket Prom. {anio_sel}', 'Portafolio (SKUs)'
+                col_cliente, f"Venta {anio_sel}", f"Venta {anio_anterior}",
+                "Variación ($)", "Variación (%)", f"Ticket Prom. {anio_sel}", "Portafolio (SKUs)",
             ]
-            tabla_final = tabla_final[cols_mostrar].sort_values(by=f'Venta {anio_sel}', ascending=False)
+            tabla_final = tabla_final[cols_mostrar].sort_values(by=f"Venta {anio_sel}", ascending=False)
 
             if busqueda_tabla:
                 tabla_final = tabla_final[tabla_final[col_cliente].astype(str).str.contains(busqueda_tabla, case=False, na=False)]
@@ -306,24 +336,27 @@ try:
             with col_desc:
                 st.write("")
                 output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    tabla_final.to_excel(writer, index=False, sheet_name='Detalle Clientes')
+                with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                    tabla_final.to_excel(writer, index=False, sheet_name="Detalle Clientes")
                 excel_data = output.getvalue()
 
                 st.download_button(
-                    label="📥 Descargar Excel", 
-                    data=excel_data, 
-                    file_name=f"detalle_avanzado_clientes_{anio_sel}.xlsx", 
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
-                    key="dl_excel_tab1"
+                    label="📥 Descargar Excel",
+                    data=excel_data,
+                    file_name=f"detalle_avanzado_clientes_{anio_sel}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dl_excel_tab1",
                 )
 
             format_dict = {
-                f'Venta {anio_sel}': '${:,.0f}', f'Venta {anio_anterior}': '${:,.0f}', 
-                'Variación ($)': '${:,.0f}', 'Variación (%)': '{:,.0f}%',
-                f'Ticket Prom. {anio_sel}': '${:,.0f}', 'Portafolio (SKUs)': '{:,.0f}'
+                f"Venta {anio_sel}": "${:,.0f}",
+                f"Venta {anio_anterior}": "${:,.0f}",
+                "Variación ($)": "${:,.0f}",
+                "Variación (%)": "{:,.0f}%",
+                f"Ticket Prom. {anio_sel}": "${:,.0f}",
+                "Portafolio (SKUs)": "{:,.0f}",
             }
-            st.dataframe(tabla_final.style.format(format_dict).map(color_variacion, subset=['Variación ($)', 'Variación (%)']), use_container_width=True, height=400)
+            st.dataframe(tabla_final.style.format(format_dict).map(color_variacion, subset=["Variación ($)", "Variación (%)"]), use_container_width=True, height=400)
 
             st.markdown("---")
             st.subheader(f"⚠️ Clientes Inactivos (Compraron en {anio_anterior} pero tienen $0 en {anio_sel})")
@@ -331,11 +364,11 @@ try:
             ventas_ant_num = df_ant.groupby(col_cliente)[col_valor].sum()
             clientes_cero = set(ventas_ant_num[ventas_ant_num > 0].index) - set(ventas_act_num[ventas_act_num > 0].index)
             df_inactivos_final = df_ant[df_ant[col_cliente].isin(clientes_cero)].groupby(col_cliente)[col_valor].sum().reset_index()
-            df_inactivos_final.rename(columns={col_valor: f'Venta Histórica {anio_anterior}'}, inplace=True)
-            df_inactivos_final = df_inactivos_final.sort_values(by=f'Venta Histórica {anio_anterior}', ascending=False)
+            df_inactivos_final.rename(columns={col_valor: f"Venta Histórica {anio_anterior}"}, inplace=True)
+            df_inactivos_final = df_inactivos_final.sort_values(by=f"Venta Histórica {anio_anterior}", ascending=False)
 
             if not df_inactivos_final.empty:
-                df_inactivos_final[f'Venta Histórica {anio_anterior}'] = df_inactivos_final[f'Venta Histórica {anio_anterior}'].apply(lambda x: f"${x:,.0f}")
+                df_inactivos_final[f"Venta Histórica {anio_anterior}"] = df_inactivos_final[f"Venta Histórica {anio_anterior}"].apply(lambda x: f"${x:,.0f}")
                 st.dataframe(df_inactivos_final, use_container_width=True)
             else:
                 st.success(f"🎉 ¡Excelente noticia! No hay clientes inactivos para los filtros y meses seleccionados entre {anio_anterior} y {anio_sel}.")
@@ -348,7 +381,7 @@ try:
         col_ref_f1, col_ref_f2, col_ref_f3 = st.columns([1, 2, 1])
         with col_ref_f1:
             anios_ref_disp = sorted([int(x) for x in df_f[col_anio].dropna().unique() if x > 0])
-            anio_ref_base = st.selectbox("Año Actual:", anios_ref_disp, index=len(anios_ref_disp)-1 if anios_ref_disp else 0, key="anio_tab2")
+            anio_ref_base = st.selectbox("Año Actual:", anios_ref_disp, index=len(anios_ref_disp) - 1 if anios_ref_disp else 0, key="anio_tab2")
         with col_ref_f2:
             meses_ref_disp = sorted(list(df_f[col_mes].dropna().unique()), key=obtener_peso_mes)
             meses_ref_sel = st.multiselect("Meses a evaluar:", options=meses_ref_disp, default=list(meses_ref_disp), key="meses_tab2")
@@ -362,85 +395,91 @@ try:
             df_ref_actual = df_f[(df_f[col_anio] == anio_ref_sel) & (df_f[col_mes].isin(meses_ref_sel))]
             df_ref_ant = df_f[(df_f[col_anio] == anio_ref_ant) & (df_f[col_mes].isin(meses_ref_sel))]
 
-            ref_act = df_ref_actual.groupby(col_referencia)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_ref_sel}'})
-            ref_ant = df_ref_ant.groupby(col_referencia)[col_valor].sum().reset_index().rename(columns={col_valor: f'Venta {anio_ref_ant}'})
+            ref_act = df_ref_actual.groupby(col_referencia)[col_valor].sum().reset_index().rename(columns={col_valor: f"Venta {anio_ref_sel}"})
+            ref_ant = df_ref_ant.groupby(col_referencia)[col_valor].sum().reset_index().rename(columns={col_valor: f"Venta {anio_ref_ant}"})
 
-            tabla_ref_comp = pd.merge(ref_act, ref_ant, on=col_referencia, how='outer').fillna(0)
-            tabla_ref_comp['Variación ($)'] = tabla_ref_comp[f'Venta {anio_ref_sel}'] - tabla_ref_comp[f'Venta {anio_ref_ant}']
-            tabla_ref_comp['Variación (%)'] = ((tabla_ref_comp[f'Venta {anio_ref_sel}'] / tabla_ref_comp[f'Venta {anio_ref_ant}'].replace(0, 1)) - 1) * 100
+            tabla_ref_comp = pd.merge(ref_act, ref_ant, on=col_referencia, how="outer").fillna(0)
+            tabla_ref_comp["Variación ($)"] = tabla_ref_comp[f"Venta {anio_ref_sel}"] - tabla_ref_comp[f"Venta {anio_ref_ant}"]
+            tabla_ref_comp["Variación (%)"] = ((tabla_ref_comp[f"Venta {anio_ref_sel}"] / tabla_ref_comp[f"Venta {anio_ref_ant}"].replace(0, 1)) - 1) * 100
 
             if not tabla_ref_comp.empty:
                 st.markdown("---")
                 st.markdown(f"### 🏆 Top {top_n} Referencias Más y Menos Vendidas ({anio_ref_sel})")
                 col_mv1, col_mv2 = st.columns(2)
 
-                df_top_mas = tabla_ref_comp.sort_values(by=f'Venta {anio_ref_sel}', ascending=False).head(top_n)
-                df_top_menos = tabla_ref_comp[tabla_ref_comp[f'Venta {anio_ref_sel}'] > 0].sort_values(by=f'Venta {anio_ref_sel}', ascending=True).head(top_n)
+                df_top_mas = tabla_ref_comp.sort_values(by=f"Venta {anio_ref_sel}", ascending=False).head(top_n)
+                df_top_menos = tabla_ref_comp[tabla_ref_comp[f"Venta {anio_ref_sel}"] > 0].sort_values(by=f"Venta {anio_ref_sel}", ascending=True).head(top_n)
 
                 with col_mv1:
-                    st.markdown(f"**🔥 Más Vendidas**")
-                    df_top_mas['Texto_Moneda'] = df_top_mas[f'Venta {anio_ref_sel}'].apply(lambda x: f"${x:,.0f}")
-                    fig_mas = px.bar(df_top_mas.sort_values(by=f'Venta {anio_ref_sel}', ascending=True), x=f'Venta {anio_ref_sel}', y=col_referencia, orientation='h', text='Texto_Moneda', color=f'Venta {anio_ref_sel}', color_continuous_scale='Greens')
-                    fig_mas.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>')
+                    st.markdown("**🔥 Más Vendidas**")
+                    df_top_mas["Texto_Moneda"] = df_top_mas[f"Venta {anio_ref_sel}"].apply(lambda x: f"${x:,.0f}")
+                    fig_mas = px.bar(df_top_mas.sort_values(by=f"Venta {anio_ref_sel}", ascending=True), x=f"Venta {anio_ref_sel}", y=col_referencia, orientation="h", text="Texto_Moneda", color=f"Venta {anio_ref_sel}", color_continuous_scale="Greens")
+                    fig_mas.update_traces(texttemplate="%{text}", textposition="auto", hovertemplate="<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>")
                     fig_mas.update_layout(showlegend=False, xaxis_title=f"Venta Total ($ {anio_ref_sel})", yaxis_title="Referencia / Producto", height=320)
                     st.plotly_chart(fig_mas, use_container_width=True)
 
                 with col_mv2:
-                    st.markdown(f"**🧊 Menos Vendidas (Bajo Movimiento)**")
-                    df_top_menos['Texto_Moneda'] = df_top_menos[f'Venta {anio_ref_sel}'].apply(lambda x: f"${x:,.0f}")
-                    fig_menos = px.bar(df_top_menos.sort_values(by=f'Venta {anio_ref_sel}', ascending=True), x=f'Venta {anio_ref_sel}', y=col_referencia, orientation='h', text='Texto_Moneda', color=f'Venta {anio_ref_sel}', color_continuous_scale='Blues')
-                    fig_menos.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>')
+                    st.markdown("**🧊 Menos Vendidas (Bajo Movimiento)**")
+                    df_top_menos["Texto_Moneda"] = df_top_menos[f"Venta {anio_ref_sel}"].apply(lambda x: f"${x:,.0f}")
+                    fig_menos = px.bar(df_top_menos.sort_values(by=f"Venta {anio_ref_sel}", ascending=True), x=f"Venta {anio_ref_sel}", y=col_referencia, orientation="h", text="Texto_Moneda", color=f"Venta {anio_ref_sel}", color_continuous_scale="Blues")
+                    fig_menos.update_traces(texttemplate="%{text}", textposition="auto", hovertemplate="<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>")
                     fig_menos.update_layout(showlegend=False, xaxis_title=f"Venta Total ($ {anio_ref_sel})", yaxis_title="Referencia / Producto", height=320)
                     st.plotly_chart(fig_menos, use_container_width=True)
 
                 st.markdown("---")
-                st.markdown(f"### 📈 Dinámica de Crecimiento y Decrecimiento YoY")
+                st.markdown("### 📈 Dinámica de Crecimiento y Decrecimiento YoY")
                 col_g_inf1, col_g_inf2 = st.columns(2)
-                df_top_crece = tabla_ref_comp.sort_values(by='Variación ($)', ascending=False).head(top_n)
-                df_top_decrece = tabla_ref_comp.sort_values(by='Variación ($)', ascending=True).head(top_n)
+                df_top_crece = tabla_ref_comp.sort_values(by="Variación ($)", ascending=False).head(top_n)
+                df_top_decrece = tabla_ref_comp.sort_values(by="Variación ($)", ascending=True).head(top_n)
 
                 with col_g_inf1:
                     st.markdown(f"**📈 Top {top_n} Referencias con Mayor Crecimiento ($)**")
-                    df_top_crece['Texto_Var'] = df_top_crece['Variación ($)'].apply(lambda x: f"${x:,.0f}")
-                    fig_crece = px.bar(df_top_crece.sort_values(by='Variación ($)', ascending=True), x='Variación ($)', y=col_referencia, orientation='h', text='Texto_Var', color='Variación ($)', color_continuous_scale='Greens')
-                    fig_crece.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Variación: $%{x:,.0f}<extra></extra>')
+                    df_top_crece["Texto_Var"] = df_top_crece["Variación ($)"].apply(lambda x: f"${x:,.0f}")
+                    fig_crece = px.bar(df_top_crece.sort_values(by="Variación ($)", ascending=True), x="Variación ($)", y=col_referencia, orientation="h", text="Texto_Var", color="Variación ($)", color_continuous_scale="Greens")
+                    fig_crece.update_traces(texttemplate="%{text}", textposition="auto", hovertemplate="<b>%{y}</b><br>Variación: $%{x:,.0f}<extra></extra>")
                     fig_crece.update_layout(showlegend=False, xaxis_title="Crecimiento en Dinero ($)", yaxis_title="Referencia / Producto", height=320)
                     st.plotly_chart(fig_crece, use_container_width=True)
 
                 with col_g_inf2:
                     st.markdown(f"**📉 Top {top_n} Referencias con Mayor Decrecimiento ($)**")
-                    df_top_decrece['Texto_Var'] = df_top_decrece['Variación ($)'].apply(lambda x: f"${x:,.0f}")
-                    fig_decrece = px.bar(df_top_decrece.sort_values(by='Variación ($)', ascending=True), x='Variación ($)', y=col_referencia, orientation='h', text='Texto_Var', color='Variación ($)', color_continuous_scale='Reds_r')
-                    fig_decrece.update_traces(texttemplate='%{text}', textposition='auto', hovertemplate='<b>%{y}</b><br>Variación: $%{x:,.0f}<extra></extra>')
+                    df_top_decrece["Texto_Var"] = df_top_decrece["Variación ($)"].apply(lambda x: f"${x:,.0f}")
+                    fig_decrece = px.bar(df_top_decrece.sort_values(by="Variación ($)", ascending=True), x="Variación ($)", y=col_referencia, orientation="h", text="Texto_Var", color="Variación ($)", color_continuous_scale="Reds_r")
+                    fig_decrece.update_traces(texttemplate="%{text}", textposition="auto", hovertemplate="<b>%{y}</b><br>Variación: $%{x:,.0f}<extra></extra>")
                     fig_decrece.update_layout(showlegend=False, xaxis_title="Decrecimiento en Dinero ($)", yaxis_title="Referencia / Producto", height=320)
                     st.plotly_chart(fig_decrece, use_container_width=True)
 
                 st.markdown("---")
                 st.subheader("📋 Tabla Comparativa Completa de Referencias")
                 col_b_ref, col_d_ref = st.columns([3, 1])
-                with col_b_ref: busq_ref = st.text_input("🔍 Buscar referencia:", "", key="busq_referencia_txt")
-                
-                tabla_ref_final = tabla_ref_comp.sort_values(by=f'Venta {anio_ref_sel}', ascending=False)
+                with col_b_ref:
+                    busq_ref = st.text_input("🔍 Buscar referencia:", "", key="busq_referencia_txt")
+
+                tabla_ref_final = tabla_ref_comp.sort_values(by=f"Venta {anio_ref_sel}", ascending=False)
                 if busq_ref:
                     tabla_ref_final = tabla_ref_final[tabla_ref_final[col_referencia].astype(str).str.contains(busq_ref, case=False, na=False)]
 
                 with col_d_ref:
                     st.write("")
                     output_ref = io.BytesIO()
-                    with pd.ExcelWriter(output_ref, engine='openpyxl') as writer_ref:
-                        tabla_ref_final.to_excel(writer_ref, index=False, sheet_name='Referencias')
+                    with pd.ExcelWriter(output_ref, engine="openpyxl") as writer_ref:
+                        tabla_ref_final.to_excel(writer_ref, index=False, sheet_name="Referencias")
                     excel_data_ref = output_ref.getvalue()
 
                     st.download_button(
-                        label="📥 Descargar Excel", 
-                        data=excel_data_ref, 
-                        file_name=f"comparativo_referencias_{anio_ref_sel}_vs_{anio_ref_ant}.xlsx", 
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
-                        key="dl_ref_excel"
+                        label="📥 Descargar Excel",
+                        data=excel_data_ref,
+                        file_name=f"comparativo_referencias_{anio_ref_sel}_vs_{anio_ref_ant}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="dl_ref_excel",
                     )
 
-                format_dict_ref = {f'Venta {anio_ref_sel}': '${:,.0f}', f'Venta {anio_ref_ant}': '${:,.0f}', 'Variación ($)': '${:,.0f}', 'Variación (%)': '{:,.0f}%'}
-                st.dataframe(tabla_ref_final.style.format(format_dict_ref).map(color_variacion, subset=['Variación ($)', 'Variación (%)']), use_container_width=True)
+                format_dict_ref = {
+                    f"Venta {anio_ref_sel}": "${:,.0f}",
+                    f"Venta {anio_ref_ant}": "${:,.0f}",
+                    "Variación ($)": "${:,.0f}",
+                    "Variación (%)": "{:,.0f}%",
+                }
+                st.dataframe(tabla_ref_final.style.format(format_dict_ref).map(color_variacion, subset=["Variación ($)", "Variación (%)"]), use_container_width=True)
 
             else:
                 st.info("No hay datos de referencias.")
@@ -455,10 +494,20 @@ try:
             col_ppto_f1, col_ppto_f2 = st.columns([1, 3])
             with col_ppto_f1:
                 anios_ppto_disp = sorted([int(x) for x in df_f[col_anio].dropna().unique() if x > 0])
-                anio_ppto_sel = st.selectbox("Año Presupuesto:", anios_ppto_disp, index=len(anios_ppto_disp)-1 if anios_ppto_disp else 0, key="anio_ppto_sel")
+                anio_ppto_sel = st.selectbox(
+                    "Año Presupuesto:",
+                    anios_ppto_disp,
+                    index=len(anios_ppto_disp) - 1 if anios_ppto_disp else 0,
+                    key="anio_ppto_sel",
+                )
             with col_ppto_f2:
                 meses_ppto_disp = sorted(list(df_f[col_mes].dropna().unique()), key=obtener_peso_mes)
-                meses_ppto_sel = st.multiselect("Meses a evaluar en PPTO:", options=meses_ppto_disp, default=list(meses_ppto_disp), key="meses_ppto_multi")
+                meses_ppto_sel = st.multiselect(
+                    "Meses a evaluar en PPTO:",
+                    options=meses_ppto_disp,
+                    default=list(meses_ppto_disp),
+                    key="meses_ppto_multi",
+                )
 
             st.markdown("---")
 
@@ -466,69 +515,195 @@ try:
                 anio_p = int(anio_ppto_sel)
                 anio_ant_p = anio_p - 1
 
-                df_ppto_ventas_actual = df[(df[col_anio] == anio_p) & (df[col_mes].isin(meses_ppto_sel))]
-                df_ppto_ventas_ant = df[(df[col_anio] == anio_ant_p) & (df[col_mes].isin(meses_ppto_sel))]
+                col_pdv = next(
+                    (
+                        c for c in df.columns
+                        if any(k in str(c).strip().lower() for k in ["dirección", "direccion", "pdv", "punto de venta", "punto venta", "sucursal", "cod pdv", "código pdv"])
+                    ),
+                    None,
+                )
 
                 cols_ppto = df_ppto.columns.tolist()
-                p_gerente_ppto = next((c for c in cols_ppto if 'gerente' in str(c).lower() or 'supervisor' in str(c).lower()), cols_ppto[1])
-                p_zona = next((c for c in cols_ppto if 'zona' in str(c).lower()), cols_ppto[2])
-                p_ppto = next((c for c in cols_ppto if 'presupuesto' in str(c).lower() or 'ppto' in str(c).lower()), cols_ppto[3])
-                p_maestra = next((c for c in cols_ppto if 'maestra' in str(c).lower()), cols_ppto[4] if len(cols_ppto)>4 else cols_ppto[3])
-                p_un = next((c for c in cols_ppto if 'un' in str(c).lower() or 'regional' in str(c).lower()), cols_ppto[0])
+                p_gerente_ppto = next((c for c in cols_ppto if "gerente" in str(c).lower() or "supervisor" in str(c).lower()), cols_ppto[1])
+                p_zona = next((c for c in cols_ppto if "zona" in str(c).lower()), cols_ppto[2])
+                p_ppto = next((c for c in cols_ppto if "presupuesto" in str(c).lower() or "ppto" in str(c).lower()), cols_ppto[3])
+                p_maestra = next((c for c in cols_ppto if "maestra" in str(c).lower()), cols_ppto[4] if len(cols_ppto) > 4 else cols_ppto[3])
+                p_un = next((c for c in cols_ppto if "un" in str(c).lower() or "regional" in str(c).lower()), None)
 
                 df_ppto_filtrado = df_ppto.copy()
-                if sel_zona != "Todos":
-                    df_ppto_filtrado = df_ppto_filtrado[df_ppto_filtrado[p_zona].astype(str) == sel_zona]
+                df_ppto_filtrado[p_zona] = df_ppto_filtrado[p_zona].astype(str).str.strip()
+                df_ppto_filtrado[p_gerente_ppto] = df_ppto_filtrado[p_gerente_ppto].astype(str).str.strip()
+                if p_un and p_un in df_ppto_filtrado.columns:
+                    df_ppto_filtrado[p_un] = df_ppto_filtrado[p_un].astype(str).str.strip()
+
+                df_ppto_filtrado[p_ppto] = pd.to_numeric(df_ppto_filtrado[p_ppto], errors="coerce").fillna(0)
+                df_ppto_filtrado[p_maestra] = pd.to_numeric(df_ppto_filtrado[p_maestra], errors="coerce").fillna(0)
+
+                if sel_reg != "Todos" and p_un and p_un in df_ppto_filtrado.columns:
+                    df_ppto_filtrado = df_ppto_filtrado[df_ppto_filtrado[p_un] == str(sel_reg).strip()]
+
                 if sel_gerente != "Todos":
-                    df_ppto_filtrado = df_ppto_filtrado[df_ppto_filtrado[p_gerente_ppto].astype(str) == sel_gerente]
+                    df_ppto_filtrado = df_ppto_filtrado[df_ppto_filtrado[p_gerente_ppto] == str(sel_gerente).strip()]
+
+                if sel_zona != "Todos":
+                    df_ppto_filtrado = df_ppto_filtrado[df_ppto_filtrado[p_zona] == str(sel_zona).strip()]
+
+                df_v_act = df[(df[col_anio] == anio_p) & (df[col_mes].isin(meses_ppto_sel))].copy()
+                df_v_ant = df[(df[col_anio] == anio_ant_p) & (df[col_mes].isin(meses_ppto_sel))].copy()
+
+                df_v_act[col_zona] = df_v_act[col_zona].astype(str).str.strip()
+                df_v_ant[col_zona] = df_v_ant[col_zona].astype(str).str.strip()
 
                 if sel_reg != "Todos":
-                    df_ppto_ventas_actual = df_ppto_ventas_actual[df_ppto_ventas_actual[col_regional].astype(str) == sel_reg]
-                    df_ppto_ventas_ant = df_ppto_ventas_ant[df_ppto_ventas_ant[col_regional].astype(str) == sel_reg]
+                    df_v_act = df_v_act[df_v_act[col_regional].astype(str).str.strip() == str(sel_reg).strip()]
+                    df_v_ant = df_v_ant[df_v_ant[col_regional].astype(str).str.strip() == str(sel_reg).strip()]
+
                 if sel_canal != "Todos":
-                    df_ppto_ventas_actual = df_ppto_ventas_actual[df_ppto_ventas_actual[col_canal].astype(str) == sel_canal]
-                    df_ppto_ventas_ant = df_ppto_ventas_ant[df_ppto_ventas_ant[col_canal].astype(str) == sel_canal]
+                    df_v_act = df_v_act[df_v_act[col_canal].astype(str).str.strip() == str(sel_canal).strip()]
+                    df_v_ant = df_v_ant[df_v_ant[col_canal].astype(str).str.strip() == str(sel_canal).strip()]
 
-                df_ventas_zona = df_ppto_ventas_actual.groupby(col_zona)[col_valor].sum().reset_index().rename(columns={col_valor: 'Venta'})
-                df_cli_gt1 = df_ppto_ventas_actual[df_ppto_ventas_actual[col_valor] > 1].groupby(col_zona)[col_cliente].nunique().reset_index().rename(columns={col_cliente: 'Impactos'})
-                df_pedidos_act = df_ppto_ventas_actual.groupby(col_zona).size().reset_index(name='Pedidos')
-                df_pedidos_ant = df_ppto_ventas_ant.groupby(col_zona).size().reset_index(name='Pedidos Ant')
+                zonas_validas = set(df_ppto_filtrado[p_zona].unique())
+                if sel_gerente != "Todos" or sel_zona != "Todos":
+                    df_v_act = df_v_act[df_v_act[col_zona].isin(zonas_validas)]
+                    df_v_ant = df_v_ant[df_v_ant[col_zona].isin(zonas_validas)]
 
-                df_ppto_filtrado[p_zona] = df_ppto_filtrado[p_zona].astype(str).str.strip()
-                df_ventas_zona[col_zona] = df_ventas_zona[col_zona].astype(str).str.strip()
-                df_cli_gt1[col_zona] = df_cli_gt1[col_zona].astype(str).str.strip()
-                df_pedidos_act[col_zona] = df_pedidos_act[col_zona].astype(str).str.strip()
-                df_pedidos_ant[col_zona] = df_pedidos_ant[col_zona].astype(str).str.strip()
+                df_act_imp = df_v_act[df_v_act[col_valor] > 1].copy()
+                if col_pdv:
+                    df_act_imp["_pdv_clave"] = (
+                        df_act_imp[col_cliente].astype(str).str.strip()
+                        + " || "
+                        + df_act_imp[col_pdv].astype(str).str.strip()
+                    )
+                else:
+                    df_act_imp["_pdv_clave"] = df_act_imp[col_cliente].astype(str).str.strip()
 
-                df_ppto_filtrado[p_ppto] = pd.to_numeric(df_ppto_filtrado[p_ppto], errors='coerce').fillna(0)
-                df_ppto_filtrado[p_maestra] = pd.to_numeric(df_ppto_filtrado[p_maestra], errors='coerce').fillna(0)
+                df_ventas_zona = df_v_act.groupby(col_zona, as_index=False)[col_valor].sum().rename(columns={col_valor: "Venta"})
+                df_cli_gt1 = df_act_imp.groupby(col_zona, as_index=False)[col_cliente].nunique().rename(columns={col_cliente: "Impactos"})
+                df_imp_pdv = df_act_imp.groupby(col_zona, as_index=False)["_pdv_clave"].nunique().rename(columns={"_pdv_clave": "Impactos PDV/Dir"})
+                df_pedidos_act = df_v_act.groupby(col_zona).size().reset_index(name="Pedidos")
+                df_pedidos_ant = df_v_ant.groupby(col_zona).size().reset_index(name="Pedidos Ant")
 
-                tabla_cumplimiento = pd.merge(df_ppto_filtrado, df_ventas_zona, left_on=p_zona, right_on=col_zona, how='left').fillna(0)
-                tabla_cumplimiento = pd.merge(tabla_cumplimiento, df_cli_gt1, on=col_zona, how='left').fillna(0)
-                tabla_cumplimiento = pd.merge(tabla_cumplimiento, df_pedidos_act, on=col_zona, how='left').fillna(0)
-                tabla_cumplimiento = pd.merge(tabla_cumplimiento, df_pedidos_ant, on=col_zona, how='left').fillna(0)
+                tabla_cumplimiento = pd.merge(df_ppto_filtrado, df_ventas_zona, left_on=p_zona, right_on=col_zona, how="left")
+                if col_zona != p_zona and col_zona in tabla_cumplimiento.columns:
+                    tabla_cumplimiento.drop(columns=[col_zona], inplace=True)
 
-                tabla_cumplimiento['% Cumplimiento Venta'] = (tabla_cumplimiento['Venta'] / tabla_cumplimiento[p_ppto].replace(0, 1)) * 100
-                tabla_cumplimiento['% Cumplimiento Impactos'] = (tabla_cumplimiento['Impactos'] / tabla_cumplimiento[p_maestra].replace(0, 1)) * 100
-                tabla_cumplimiento['Variación Pedidos'] = tabla_cumplimiento['Pedidos'] - tabla_cumplimiento['Pedidos Ant']
+                tabla_cumplimiento = pd.merge(tabla_cumplimiento, df_cli_gt1, on=p_zona, how="left")
+                tabla_cumplimiento = pd.merge(tabla_cumplimiento, df_imp_pdv, on=p_zona, how="left")
+                tabla_cumplimiento = pd.merge(tabla_cumplimiento, df_pedidos_act, on=p_zona, how="left")
+                tabla_cumplimiento = pd.merge(tabla_cumplimiento, df_pedidos_ant, on=p_zona, how="left")
+
+                for col_num in ["Venta", "Impactos", "Impactos PDV/Dir", "Pedidos", "Pedidos Ant"]:
+                    if col_num not in tabla_cumplimiento.columns:
+                        tabla_cumplimiento[col_num] = 0
+                    tabla_cumplimiento[col_num] = pd.to_numeric(tabla_cumplimiento[col_num], errors="coerce").fillna(0)
+
+                tabla_cumplimiento["% Cumplimiento Venta"] = (tabla_cumplimiento["Venta"] / tabla_cumplimiento[p_ppto].replace(0, 1)) * 100
+                tabla_cumplimiento["% Cumplimiento Impactos"] = (tabla_cumplimiento["Impactos"] / tabla_cumplimiento[p_maestra].replace(0, 1)) * 100
+                tabla_cumplimiento["Variación Pedidos"] = tabla_cumplimiento["Pedidos"] - tabla_cumplimiento["Pedidos Ant"]
+                tabla_cumplimiento["Var. Pedidos (%)"] = ((tabla_cumplimiento["Pedidos"] / tabla_cumplimiento["Pedidos Ant"].replace(0, 1)) - 1) * 100
+
+                partes_titulo = []
+                if sel_reg != "Todos":
+                    partes_titulo.append(f"Regional: {sel_reg}")
+                if sel_gerente != "Todos":
+                    partes_titulo.append(f"Supervisor: {sel_gerente}")
+                if sel_zona != "Todos":
+                    partes_titulo.append(f"Zona: {sel_zona}")
+                if sel_canal != "Todos":
+                    partes_titulo.append(f"Canal: {sel_canal}")
+                etiqueta_filtro = " | ".join(partes_titulo) if partes_titulo else "General (Todos los filtros)"
 
                 total_ppto = tabla_cumplimiento[p_ppto].sum()
-                total_venta_real = tabla_cumplimiento['Venta'].sum()
-                cumplimiento_global_ppto = (total_venta_real / total_ppto) * 100 if total_ppto > 0 else 0
+                total_venta_real = tabla_cumplimiento["Venta"].sum()
+                total_maestra = tabla_cumplimiento[p_maestra].sum()
+                total_impactos_nit = tabla_cumplimiento["Impactos"].sum()
+                total_impactos_pdv = tabla_cumplimiento["Impactos PDV/Dir"].sum()
+                total_ped_act = tabla_cumplimiento["Pedidos"].sum()
+                total_ped_ant = tabla_cumplimiento["Pedidos Ant"].sum()
+                var_ped_num = total_ped_act - total_ped_ant
+                var_ped_pct = ((total_ped_act / total_ped_ant) - 1) * 100 if total_ped_ant > 0 else 0
 
-                st.metric("Cumplimiento Global PPTO", f"{cumplimiento_global_ppto:,.1f}%", f"${total_venta_real:,.0f} / ${total_ppto:,.0f}")
+                cump_venta_pct = (total_venta_real / total_ppto) * 100 if total_ppto > 0 else 0
+                cump_imp_pct = (total_impactos_nit / total_maestra) * 100 if total_maestra > 0 else 0
+
+                st.markdown(f"### 📌 Resumen Ejecutivo — {etiqueta_filtro}")
+                if not col_pdv:
+                    st.caption("Nota: No se detectó columna de Dirección/PDV en la base; Impactos PDV/Dir refleja el conteo único por cliente.")
+
+                st.markdown(
+                    f"""
+                    <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:14px; margin-bottom:12px;">
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-left:5px solid #0066cc; border-radius:10px; padding:14px;">
+                            <div style="font-size:0.82rem; color:#475569; font-weight:600;">💰 PRESUPUESTO VS VENTAS</div>
+                            <div style="font-size:1.45rem; font-weight:700; color:#0f172a; margin:4px 0;">{cump_venta_pct:,.1f}% <span style="font-size:0.85rem; font-weight:500; color:#0066cc;">Cumpl.</span></div>
+                            <div style="font-size:0.84rem; color:#334155;"><b>Venta:</b> ${total_venta_real:,.0f}</div>
+                            <div style="font-size:0.84rem; color:#64748b;"><b>PPTO:</b> ${total_ppto:,.0f}</div>
+                        </div>
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-left:5px solid #2e7d32; border-radius:10px; padding:14px;">
+                            <div style="font-size:0.82rem; color:#475569; font-weight:600;">🎯 MAESTRA VS IMPACTOS (NIT)</div>
+                            <div style="font-size:1.45rem; font-weight:700; color:#0f172a; margin:4px 0;">{cump_imp_pct:,.1f}% <span style="font-size:0.85rem; font-weight:500; color:#2e7d32;">Cumpl.</span></div>
+                            <div style="font-size:0.84rem; color:#334155;"><b>Impactos:</b> {total_impactos_nit:,.0f}</div>
+                            <div style="font-size:0.84rem; color:#64748b;"><b>Maestra:</b> {total_maestra:,.0f}</div>
+                        </div>
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-left:5px solid #7c3aed; border-radius:10px; padding:14px;">
+                            <div style="font-size:0.82rem; color:#475569; font-weight:600;">📍 IMPACTOS POR PDV / DIRECCIÓN</div>
+                            <div style="font-size:1.45rem; font-weight:700; color:#0f172a; margin:4px 0;">{total_impactos_pdv:,.0f} <span style="font-size:0.85rem; font-weight:500; color:#7c3aed;">PDV / Dir.</span></div>
+                            <div style="font-size:0.84rem; color:#334155;"><b>Por Cliente/NIT:</b> {total_impactos_nit:,.0f}</div>
+                            <div style="font-size:0.84rem; color:#64748b;"><b>Diferencia Multi-PDV:</b> +{max(0, total_impactos_pdv - total_impactos_nit):,.0f}</div>
+                        </div>
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-left:5px solid {'#2e7d32' if var_ped_num >= 0 else '#c62828'}; border-radius:10px; padding:14px;">
+                            <div style="font-size:0.82rem; color:#475569; font-weight:600;">📦 PEDIDOS VS AÑO ANT. ({anio_p} vs {anio_ant_p})</div>
+                            <div style="font-size:1.45rem; font-weight:700; color:#0f172a; margin:4px 0;">{total_ped_act:,.0f} <span style="font-size:0.85rem; font-weight:600; color:{'#2e7d32' if var_ped_num >= 0 else '#c62828'};">({var_ped_num:+,.0f} / {var_ped_pct:+.1f}%)</span></div>
+                            <div style="font-size:0.84rem; color:#334155;"><b>Año {anio_p}:</b> {total_ped_act:,.0f} pedidos</div>
+                            <div style="font-size:0.84rem; color:#64748b;"><b>Año {anio_ant_p}:</b> {total_ped_ant:,.0f} pedidos</div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                if sel_reg != "Todos" and sel_zona == "Todos" and not tabla_cumplimiento.empty:
+                    resumen_zonas = (
+                        tabla_cumplimiento.groupby(p_zona, as_index=False)[[p_ppto, "Venta", p_maestra, "Impactos", "Impactos PDV/Dir", "Pedidos", "Pedidos Ant"]]
+                        .sum()
+                    )
+                    resumen_zonas["% Cumplimiento Venta"] = (resumen_zonas["Venta"] / resumen_zonas[p_ppto].replace(0, 1)) * 100
+                    resumen_zonas["% Cumplimiento Impactos"] = (resumen_zonas["Impactos"] / resumen_zonas[p_maestra].replace(0, 1)) * 100
+                    resumen_zonas["Variación Pedidos"] = resumen_zonas["Pedidos"] - resumen_zonas["Pedidos Ant"]
+                    resumen_zonas["Var. Pedidos (%)"] = ((resumen_zonas["Pedidos"] / resumen_zonas["Pedidos Ant"].replace(0, 1)) - 1) * 100
+
+                    st.markdown(f"**Resumen por Zona ({sel_reg}):**")
+                    st.dataframe(
+                        resumen_zonas.style.format({
+                            p_ppto: "${:,.0f}",
+                            "Venta": "${:,.0f}",
+                            "% Cumplimiento Venta": "{:,.1f}%",
+                            p_maestra: "{:,.0f}",
+                            "Impactos": "{:,.0f}",
+                            "% Cumplimiento Impactos": "{:,.1f}%",
+                            "Impactos PDV/Dir": "{:,.0f}",
+                            "Pedidos": "{:,.0f}",
+                            "Pedidos Ant": "{:,.0f}",
+                            "Variación Pedidos": "{:+,.0f}",
+                            "Var. Pedidos (%)": "{:+.1f}%",
+                        }),
+                        use_container_width=True,
+                    )
+
                 st.markdown("---")
 
                 format_dict_ppto = {
-                    p_ppto: '${:,.0f}',
-                    'Venta': '${:,.0f}',
-                    '% Cumplimiento Venta': '{:,.1f}%',
-                    'Impactos': '{:,.0f}',
-                    p_maestra: '{:,.0f}',
-                    '% Cumplimiento Impactos': '{:,.1f}%',
-                    'Pedidos': '{:,.0f}',
-                    'Pedidos Ant': '{:,.0f}',
-                    'Variación Pedidos': '{:,.0f}'
+                    p_ppto: "${:,.0f}",
+                    "Venta": "${:,.0f}",
+                    "% Cumplimiento Venta": "{:,.1f}%",
+                    p_maestra: "{:,.0f}",
+                    "Impactos": "{:,.0f}",
+                    "% Cumplimiento Impactos": "{:,.1f}%",
+                    "Impactos PDV/Dir": "{:,.0f}",
+                    "Pedidos": "{:,.0f}",
+                    "Pedidos Ant": "{:,.0f}",
+                    "Variación Pedidos": "{:+,.0f}",
+                    "Var. Pedidos (%)": "{:+.1f}%",
                 }
                 st.dataframe(tabla_cumplimiento.style.format(format_dict_ppto, na_rep="0"), use_container_width=True)
             else:

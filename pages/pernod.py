@@ -37,6 +37,15 @@ def _normalizar_texto(val):
     return re.sub(r"\s+", " ", txt).strip()
 
 
+def _limpiar_marca_visible(val):
+    if pd.isna(val):
+        return "Otros"
+    txt = re.sub(r"\s+", " ", str(val).strip())
+    if txt == "" or txt.lower() in {"nan", "none", "null", "sin identificar", "kv sin identificar", "otros"}:
+        return "Otros"
+    return txt
+
+
 def _detectar_columna(columnas, palabras_clave, fallback_idx=0):
     for pk in palabras_clave:
         pk_l = pk.lower()
@@ -159,8 +168,8 @@ def cargar_datos_rapido(hojas_sel, hoja_ppto, hoja_marcas, motor):
         m_nom = next((c for c in cm if any(k in str(c).lower() for k in ["desc", "nombre", "prod"])), None)
 
         for _, row in df_marcas.iterrows():
-            marca_val = str(row[m_marca]).strip() if pd.notna(row[m_marca]) else ""
-            if not marca_val or _normalizar_texto(marca_val) == "otros":
+            marca_val = _limpiar_marca_visible(row[m_marca]) if pd.notna(row[m_marca]) else "Otros"
+            if marca_val == "Otros":
                 continue
             if m_cod and pd.notna(row[m_cod]):
                 k = _limpiar_clave(row[m_cod])
@@ -180,25 +189,27 @@ def cargar_datos_rapido(hojas_sel, hoja_ppto, hoja_marcas, motor):
         kr = _limpiar_clave(r_val)
         kp = _limpiar_clave(p_val)
         if kr in mapa_exacto:
-            mapa_par[(r_val, p_val)] = mapa_exacto[kr]
+            mapa_par[(r_val, p_val)] = _limpiar_marca_visible(mapa_exacto[kr])
             continue
         if kp in mapa_exacto:
-            mapa_par[(r_val, p_val)] = mapa_exacto[kp]
+            mapa_par[(r_val, p_val)] = _limpiar_marca_visible(mapa_exacto[kp])
             continue
 
         texto = _normalizar_texto(f"{p_val} {r_val}")
         asignada = "Otros"
         for marca_nom, pistas in reglas_rapidas:
             if any(p in texto for p in pistas):
-                asignada = marca_nom
+                asignada = _limpiar_marca_visible(marca_nom)
                 break
         mapa_par[(r_val, p_val)] = asignada
 
-    df_ventas["Marca Estrategica"] = [mapa_par[(r, p)] for r, p in zip(serie_ref, serie_prod)]
+    df_ventas["Marca Estrategica"] = [
+        _limpiar_marca_visible(mapa_par[(r, p)]) for r, p in zip(serie_ref, serie_prod)
+    ]
 
     for c_cat in [col_regional, col_canal, col_gerente, col_zona, col_mes, "Marca Estrategica"]:
         if c_cat in df_ventas.columns:
-            df_ventas[c_cat] = df_ventas[c_cat].astype(str).astype("category")
+            df_ventas[c_cat] = df_ventas[c_cat].astype(str).str.strip().astype("category")
 
     meta = {
         "col_regional": col_regional,
@@ -245,7 +256,12 @@ try:
     df_f = df.copy()
 
     def _filtro_cat(col_name, label):
-        vals = sorted([x for x in df_f[col_name].dropna().unique().tolist() if str(x).strip() not in ("", "nan", "None")])
+        vals = sorted([
+            _limpiar_marca_visible(x) if col_name == "Marca Estrategica" else str(x).strip()
+            for x in df_f[col_name].dropna().unique().tolist()
+            if str(x).strip() not in ("", "nan", "None")
+        ])
+        vals = sorted(set(vals))
         return st.sidebar.selectbox(label, ["Todos"] + vals, index=0)
 
     sel_reg = _filtro_cat(col_regional, "Código UN (Regional)")
@@ -266,7 +282,7 @@ try:
 
     sel_marca = _filtro_cat("Marca Estrategica", "Marca Estratégica")
     if sel_marca != "Todos":
-        df_f = df_f[df_f["Marca Estrategica"].astype(str) == sel_marca]
+        df_f = df_f[df_f["Marca Estrategica"].astype(str).map(_limpiar_marca_visible) == sel_marca]
 
     orden_meses_ref = [
         "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
@@ -475,27 +491,36 @@ try:
         if a_m and m_m:
             am = int(a_m)
             am_ant = am - 1
-            df_ma = df_f[(df_f[col_anio] == am) & (df_f[col_mes].astype(str).isin(m_m))]
-            df_mp = df_f[(df_f[col_anio] == am_ant) & (df_f[col_mes].astype(str).isin(m_m))]
 
-            ma = df_ma.groupby("Marca Estrategica", observed=False, as_index=False)[col_valor].sum().rename(columns={col_valor: f"Venta {am}"})
-            mp = df_mp.groupby("Marca Estrategica", observed=False, as_index=False)[col_valor].sum().rename(columns={col_valor: f"Venta {am_ant}"})
-            tm = pd.merge(ma, mp, on="Marca Estrategica", how="outer").fillna(0)
+            df_ma = df_f[(df_f[col_anio] == am) & (df_f[col_mes].astype(str).isin(m_m))].copy()
+            df_mp = df_f[(df_f[col_anio] == am_ant) & (df_f[col_mes].astype(str).isin(m_m))].copy()
+
+            df_ma["Marca Limpia"] = df_ma["Marca Estrategica"].astype(str).map(_limpiar_marca_visible)
+            df_mp["Marca Limpia"] = df_mp["Marca Estrategica"].astype(str).map(_limpiar_marca_visible)
+
+            ma = df_ma.groupby("Marca Limpia", as_index=False)[col_valor].sum().rename(columns={col_valor: f"Venta {am}"})
+            mp = df_mp.groupby("Marca Limpia", as_index=False)[col_valor].sum().rename(columns={col_valor: f"Venta {am_ant}"})
+
+            tm = pd.merge(ma, mp, on="Marca Limpia", how="outer").fillna(0)
+            tm = tm[tm["Marca Limpia"].astype(str).str.strip() != ""]
+            tm.rename(columns={"Marca Limpia": "Marca Estrategica"}, inplace=True)
+
             tot_m = tm[f"Venta {am}"].sum()
             tm["Participación (%)"] = (tm[f"Venta {am}"] / tot_m * 100) if tot_m > 0 else 0
             tm["Variación ($)"] = tm[f"Venta {am}"] - tm[f"Venta {am_ant}"]
             tm["Variación (%)"] = ((tm[f"Venta {am}"] / tm[f"Venta {am_ant}"].replace(0, 1)) - 1) * 100
             tm = tm.sort_values(by=f"Venta {am}", ascending=False)
 
+            tm_plot = tm.sort_values(by=f"Venta {am}", ascending=True)
             fig_m = px.bar(
-                tm.sort_values(by=f"Venta {am}", ascending=True),
+                tm_plot,
                 x=f"Venta {am}",
                 y="Marca Estrategica",
                 orientation="h",
                 color=f"Venta {am}",
                 color_continuous_scale="Purples",
             )
-            fig_m.update_layout(height=340, showlegend=False)
+            fig_m.update_layout(height=max(340, len(tm_plot) * 26), showlegend=False)
             st.plotly_chart(fig_m, use_container_width=True)
 
             st.dataframe(
@@ -511,7 +536,7 @@ try:
 
             st.markdown("---")
             st.subheader("🔎 Referencias asignadas a 'Otros'")
-            df_otros = df_ma[df_ma["Marca Estrategica"].astype(str) == "Otros"]
+            df_otros = df_ma[df_ma["Marca Limpia"] == "Otros"]
             if not df_otros.empty:
                 g_cols = [col_referencia] + ([col_nombre_producto] if col_nombre_producto and col_nombre_producto != col_referencia else [])
                 res_o = df_otros.groupby(g_cols, as_index=False).agg(
@@ -528,7 +553,7 @@ try:
                     data=out.getvalue(),
                     file_name=f"referencias_otros_{am}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="dl_otros_fast",
+                    key="dl_otros_clean",
                 )
                 st.dataframe(res_o.style.format({"Registros": "{:,.0f}", "Venta_Total": "${:,.0f}", "Clientes": "{:,.0f}"}), use_container_width=True)
             else:

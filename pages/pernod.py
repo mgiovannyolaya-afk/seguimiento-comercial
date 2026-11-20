@@ -1,6 +1,7 @@
 import hashlib
 import io
 import os
+import re
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -33,6 +34,15 @@ def _firma_archivo(ruta):
     return f"{stat.st_size}-{stat.st_mtime_ns}-{h.hexdigest()}"
 
 
+def _limpiar_clave(val):
+    if pd.isna(val):
+        return ""
+    txt = str(val).strip().lower()
+    txt = re.sub(r"\.0$", "", txt)
+    txt = re.sub(r"\s+", " ", txt)
+    return txt
+
+
 @st.cache_data
 def cargar_datos(firma=""):
     xls_path = "BV PERNOD TODA.xlsb"
@@ -41,9 +51,15 @@ def cargar_datos(firma=""):
 
     nombre_ppto_real = next(
         (h for h in nombres_hojas if "ppto" in str(h).lower()),
-        nombres_hojas[1] if len(nombres_hojas) > 1 else None,
+        None,
     )
-    hojas_ventas = [h for h in nombres_hojas if h != nombre_ppto_real]
+    nombre_marcas_real = next(
+        (h for h in nombres_hojas if "marca" in str(h).lower()),
+        None,
+    )
+
+    hojas_excluidas = {h for h in [nombre_ppto_real, nombre_marcas_real] if h is not None}
+    hojas_ventas = [h for h in nombres_hojas if h not in hojas_excluidas]
     if not hojas_ventas:
         hojas_ventas = [nombres_hojas[0]]
 
@@ -59,11 +75,20 @@ def cargar_datos(firma=""):
     except Exception:
         df_ppto = pd.DataFrame()
 
-    return df_ventas, df_ppto
+    try:
+        df_marcas = (
+            pd.read_excel(xl, sheet_name=nombre_marcas_real, engine="pyxlsb")
+            if nombre_marcas_real is not None
+            else pd.DataFrame()
+        )
+    except Exception:
+        df_marcas = pd.DataFrame()
+
+    return df_ventas, df_ppto, df_marcas
 
 
 try:
-    df, df_ppto = cargar_datos(_firma_archivo("BV PERNOD TODA.xlsb"))
+    df, df_ppto, df_marcas = cargar_datos(_firma_archivo("BV PERNOD TODA.xlsb"))
     columnas = df.columns.tolist()
 
     def detectar_columna(palabras_clave, fallback_idx=0):
@@ -82,7 +107,7 @@ try:
     col_gerente = detectar_columna(["Gerente Zona", "Gerente Unidad", "Supervisor", "Gerente"], 2)
     col_zona = detectar_columna(["Código Zona", "Codigo Zona", "Cod Zona", "Id Zona"], 3)
     col_cliente = detectar_columna(["Nombre Cliente", "Cliente", "Documento Cliente"], 4)
-    col_referencia = detectar_columna(["Referencia", "Artículo", "Articulo", "SKU", "Producto", "Item", "Descripción Item"], 5)
+    col_referencia = detectar_columna(["Referencia", "Artículo", "Articulo", "SKU", "Producto", "Item", "Descripción Item", "Descripcion"], 5)
     col_anio = detectar_columna(["Año", "Anio", "Year"], 6)
     col_mes = detectar_columna(["Mes", "Month"], 7)
     col_valor = detectar_columna(["Ventas Det", "Venta", "Valor", "Total"], 8)
@@ -112,6 +137,59 @@ try:
         .map(lambda x: mapa_meses.get(x, x.capitalize()))
     )
 
+    # Cruce automático con hoja MARCAS + detección de referencias que empiezan con KV
+    mapa_cod_marca = {}
+    mapa_desc_marca = {}
+    marcas_conocidas = []
+
+    if not df_marcas.empty:
+        cols_m = df_marcas.columns.tolist()
+        m_marca = next((c for c in cols_m if "marca" in str(c).lower()), cols_m[0])
+        m_ean = next((c for c in cols_m if "ean" in str(c).lower() or "codigo" in str(c).lower() or "código" in str(c).lower() or "ref" in str(c).lower()), None)
+        m_desc = next((c for c in cols_m if "desc" in str(c).lower() or "nombre" in str(c).lower() or "prod" in str(c).lower()), None)
+
+        marcas_conocidas = sorted(
+            [str(x).strip() for x in df_marcas[m_marca].dropna().unique() if str(x).strip() != ""],
+            key=len,
+            reverse=True,
+        )
+
+        for _, row in df_marcas.iterrows():
+            marca_val = str(row[m_marca]).strip() if pd.notna(row[m_marca]) else ""
+            if not marca_val:
+                continue
+            if m_ean and pd.notna(row[m_ean]):
+                k_ean = _limpiar_clave(row[m_ean])
+                if k_ean and k_ean not in mapa_cod_marca:
+                    mapa_cod_marca[k_ean] = marca_val
+            if m_desc and pd.notna(row[m_desc]):
+                k_desc = _limpiar_clave(row[m_desc])
+                if k_desc and k_desc not in mapa_desc_marca:
+                    mapa_desc_marca[k_desc] = marca_val
+
+    def resolver_marca_y_estado(val_ref):
+        texto_orig = "" if pd.isna(val_ref) else str(val_ref).strip()
+        clave = _limpiar_clave(val_ref)
+
+        if clave in mapa_cod_marca:
+            return mapa_cod_marca[clave], "En base MARCAS"
+        if clave in mapa_desc_marca:
+            return mapa_desc_marca[clave], "En base MARCAS (por desc.)"
+
+        es_kv = bool(re.match(r"^kv(?:\b|[\s\-_:/0-9])", clave))
+        if es_kv:
+            for mc in marcas_conocidas:
+                raiz_marca = mc.split()[0].lower()
+                if len(raiz_marca) >= 4 and raiz_marca in clave:
+                    return f"{mc} (KV)", "KV sin registrar en MARCAS"
+            return "KV sin identificar", "KV sin registrar en MARCAS"
+
+        return "Sin identificar", "No encontrada en MARCAS"
+
+    res_marcas = df[col_referencia].apply(resolver_marca_y_estado)
+    df["Marca Estrategica"] = [r[0] for r in res_marcas]
+    df["Estado Cruce Marca"] = [r[1] for r in res_marcas]
+
     st.sidebar.header("🎯 Filtros Globales")
     df_f = df.copy()
 
@@ -139,10 +217,16 @@ try:
         df_f = df_f[df_f[col_zona].astype(str) == sel_zona]
         df_f_global = df_f_global[df_f_global[col_zona].astype(str) == sel_zona]
 
-    tab1, tab2, tab3, tab4 = st.tabs([
+    opciones_marca = ["Todos"] + sorted([str(x) for x in df_f["Marca Estrategica"].dropna().unique()])
+    sel_marca = st.sidebar.selectbox("Marca Estratégica", opciones_marca, index=0)
+    if sel_marca != "Todos":
+        df_f = df_f[df_f["Marca Estrategica"].astype(str) == sel_marca]
+
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📊 Dashboard General & Clientes",
         "📦 Análisis de Referencias (YoY)",
         "🎯 Presupuesto & Zonas (PPTO)",
+        "🍾 Análisis por Marcas & KV",
         "🔍 Detalle Clientes y Referencias",
     ])
 
@@ -562,6 +646,10 @@ try:
                     df_v_act = df_v_act[df_v_act[col_canal].astype(str).str.strip() == str(sel_canal).strip()]
                     df_v_ant = df_v_ant[df_v_ant[col_canal].astype(str).str.strip() == str(sel_canal).strip()]
 
+                if sel_marca != "Todos":
+                    df_v_act = df_v_act[df_v_act["Marca Estrategica"].astype(str).str.strip() == str(sel_marca).strip()]
+                    df_v_ant = df_v_ant[df_v_ant["Marca Estrategica"].astype(str).str.strip() == str(sel_marca).strip()]
+
                 zonas_validas = set(df_ppto_filtrado[p_zona].unique())
                 if sel_gerente != "Todos" or sel_zona != "Todos":
                     df_v_act = df_v_act[df_v_act[col_zona].isin(zonas_validas)]
@@ -611,6 +699,8 @@ try:
                     partes_titulo.append(f"Zona: {sel_zona}")
                 if sel_canal != "Todos":
                     partes_titulo.append(f"Canal: {sel_canal}")
+                if sel_marca != "Todos":
+                    partes_titulo.append(f"Marca: {sel_marca}")
                 etiqueta_filtro = " | ".join(partes_titulo) if partes_titulo else "General (Todos los filtros)"
 
                 total_ppto = tabla_cumplimiento[p_ppto].sum()
@@ -712,6 +802,98 @@ try:
             st.info("No se encontró la hoja de presupuesto (PPTO).")
 
     with tab4:
+        st.subheader("🍾 Análisis por Marcas Estratégicas & KV")
+        col_m_f1, col_m_f2 = st.columns([1, 3])
+        with col_m_f1:
+            anios_m_disp = sorted([int(x) for x in df_f[col_anio].dropna().unique() if x > 0])
+            anio_m_sel = st.selectbox("Año a analizar:", anios_m_disp, index=len(anios_m_disp) - 1 if anios_m_disp else 0, key="anio_tab4")
+        with col_m_f2:
+            meses_m_disp = sorted(list(df_f[col_mes].dropna().unique()), key=obtener_peso_mes)
+            meses_m_sel = st.multiselect("Meses activos:", options=meses_m_disp, default=list(meses_m_disp), key="meses_tab4")
+
+        st.markdown("---")
+
+        if anio_m_sel and meses_m_sel:
+            anio_m = int(anio_m_sel)
+            anio_m_ant = anio_m - 1
+
+            df_m_act = df_f[(df_f[col_anio] == anio_m) & (df_f[col_mes].isin(meses_m_sel))]
+            df_m_ant = df_f[(df_f[col_anio] == anio_m_ant) & (df_f[col_mes].isin(meses_m_sel))]
+
+            m_act = df_m_act.groupby("Marca Estrategica", as_index=False)[col_valor].sum().rename(columns={col_valor: f"Venta {anio_m}"})
+            m_ant = df_m_ant.groupby("Marca Estrategica", as_index=False)[col_valor].sum().rename(columns={col_valor: f"Venta {anio_m_ant}"})
+
+            tabla_marcas = pd.merge(m_act, m_ant, on="Marca Estrategica", how="outer").fillna(0)
+            total_m_act = tabla_marcas[f"Venta {anio_m}"].sum()
+            tabla_marcas["Participación (%)"] = (tabla_marcas[f"Venta {anio_m}"] / total_m_act * 100) if total_m_act > 0 else 0
+            tabla_marcas["Variación ($)"] = tabla_marcas[f"Venta {anio_m}"] - tabla_marcas[f"Venta {anio_m_ant}"]
+            tabla_marcas["Variación (%)"] = ((tabla_marcas[f"Venta {anio_m}"] / tabla_marcas[f"Venta {anio_m_ant}"].replace(0, 1)) - 1) * 100
+            tabla_marcas = tabla_marcas.sort_values(by=f"Venta {anio_m}", ascending=False)
+
+            st.subheader(f"📊 Ventas y Participación por Marca ({anio_m} vs {anio_m_ant})")
+            fig_marcas = px.bar(
+                tabla_marcas.sort_values(by=f"Venta {anio_m}", ascending=True),
+                x=f"Venta {anio_m}",
+                y="Marca Estrategica",
+                orientation="h",
+                text=tabla_marcas.sort_values(by=f"Venta {anio_m}", ascending=True)[f"Venta {anio_m}"].apply(lambda x: f"${x:,.0f}"),
+                color=f"Venta {anio_m}",
+                color_continuous_scale="Purples",
+            )
+            fig_marcas.update_traces(texttemplate="%{text}", textposition="auto", hovertemplate="<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>")
+            fig_marcas.update_layout(showlegend=False, xaxis_title=f"Venta Total ($ {anio_m})", yaxis_title="Marca Estratégica", height=360)
+            st.plotly_chart(fig_marcas, use_container_width=True)
+
+            st.dataframe(
+                tabla_marcas.style.format({
+                    f"Venta {anio_m}": "${:,.0f}",
+                    f"Venta {anio_m_ant}": "${:,.0f}",
+                    "Participación (%)": "{:,.1f}%",
+                    "Variación ($)": "${:+,.0f}",
+                    "Variación (%)": "{:+.1f}%",
+                }).map(color_variacion, subset=["Variación ($)", "Variación (%)"]),
+                use_container_width=True,
+            )
+
+            st.markdown("---")
+            st.subheader("🔎 Referencias que empiezan por KV no registradas en la hoja MARCAS")
+            df_kv_pend = df_m_act[df_m_act["Estado Cruce Marca"] == "KV sin registrar en MARCAS"].copy()
+
+            if not df_kv_pend.empty:
+                resumen_kv = (
+                    df_kv_pend.groupby([col_referencia, "Marca Estrategica"], as_index=False)
+                    .agg(
+                        Registros=(col_valor, "count"),
+                        Venta_Total=(col_valor, "sum"),
+                        Clientes_Unicos=(col_cliente, "nunique"),
+                    )
+                    .sort_values(by="Venta_Total", ascending=False)
+                )
+                st.warning(f"Se detectaron **{len(resumen_kv)}** referencias que empiezan con **KV** sin registro exacto en `MARCAS` (total **${resumen_kv['Venta_Total'].sum():,.0f}** en la selección actual).")
+
+                out_kv = io.BytesIO()
+                with pd.ExcelWriter(out_kv, engine="openpyxl") as writer_kv:
+                    resumen_kv.to_excel(writer_kv, index=False, sheet_name="KV_Sin_Registrar")
+                st.download_button(
+                    label="📥 Descargar KV sin registrar (Excel)",
+                    data=out_kv.getvalue(),
+                    file_name=f"kv_sin_registrar_marcas_{anio_m}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dl_kv_excel",
+                )
+
+                st.dataframe(
+                    resumen_kv.style.format({
+                        "Registros": "{:,.0f}",
+                        "Venta_Total": "${:,.0f}",
+                        "Clientes_Unicos": "{:,.0f}",
+                    }),
+                    use_container_width=True,
+                )
+            else:
+                st.success("Todas las referencias KV encontradas en la selección actual ya están identificadas.")
+
+    with tab5:
         st.subheader("🔍 Detalle de Clientes y Referencias")
         st.markdown("Consulta rápida de transacciones y movimientos filtrados.")
         st.dataframe(df_f, use_container_width=True, height=450)

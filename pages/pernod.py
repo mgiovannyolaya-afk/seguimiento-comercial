@@ -1,21 +1,22 @@
-import os
 import hashlib
-import streamlit as st
+import io
+import os
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
-import calendar
-import io
+import streamlit as st
 
 st.set_page_config(page_title="SEGUIMIENTO PERNOD RICARD", layout="wide")
 
-st.markdown("""
+st.markdown(
+    """
     <style>
         [data-testid="stMetricValue"] {
             font-size: 1.35rem !important;
         }
     </style>
-""", unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True,
+)
 
 st.title("🍾 SEGUIMIENTO PERNOD RICARD 🥂")
 st.markdown("---")
@@ -39,7 +40,7 @@ def cargar_datos(firma_version: str = ""):
     xl = pd.ExcelFile(xls_path, engine="pyxlsb")
     nombres_hojas = xl.sheet_names
 
-    # Identificar hoja de PPTO y excluirla de ventas para evitar mezclar columnas o ceros
+    # Separar hoja de presupuesto para evitar mezclarla con las hojas de ventas
     nombre_ppto_real = next((h for h in nombres_hojas if "ppto" in str(h).lower()), None)
     hojas_ventas = [h for h in nombres_hojas if h != nombre_ppto_real]
     if not hojas_ventas:
@@ -69,7 +70,7 @@ MAPA_MESES = {
 
 PESO_MESES = {
     "Ene": 1, "Feb": 2, "Mar": 3, "Abr": 4, "May": 5, "Jun": 6,
-    "Jul": 7, "Ago": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dic": 12
+    "Jul": 7, "Ago": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dic": 12,
 }
 
 
@@ -95,7 +96,7 @@ def color_variacion(val):
         if isinstance(val, (int, float)):
             if val > 0:
                 return "color: #2E7D32; font-weight: bold;"
-            elif val < 0:
+            if val < 0:
                 return "color: #C62828; font-weight: bold;"
     except Exception:
         pass
@@ -130,7 +131,7 @@ try:
 
     df[col_valor] = pd.to_numeric(
         df[col_valor].astype(str).str.replace(r"[\$\s]", "", regex=True),
-        errors="coerce"
+        errors="coerce",
     ).fillna(0)
     df[col_anio] = pd.to_numeric(df[col_anio], errors="coerce").fillna(0).astype(int)
     df[col_mes] = df[col_mes].apply(limpiar_etiqueta_mes)
@@ -165,11 +166,10 @@ try:
 
     meses_ordenados_base = sorted(
         [m for m in df_f[col_mes].dropna().unique() if str(m).strip() != ""],
-        key=obtener_peso_mes
+        key=obtener_peso_mes,
     )
     anios_base_disp = sorted([int(x) for x in df_f[col_anio].dropna().unique() if int(x) > 0])
 
-    # Detectar automáticamente cualquier mes nuevo agregado en una base actualizada
     if "meses_conocidos" not in st.session_state:
         st.session_state["meses_conocidos"] = list(meses_ordenados_base)
 
@@ -180,14 +180,14 @@ try:
             if key_ms in st.session_state:
                 st.session_state[key_ms] = sorted(
                     list(set(st.session_state[key_ms]) | set(nuevos_meses)),
-                    key=obtener_peso_mes
+                    key=obtener_peso_mes,
                 )
 
     tab1, tab2, tab3, tab4 = st.tabs([
         "📊 Dashboard General & Clientes",
         "📦 Análisis de Referencias (YoY)",
         "🎯 Presupuesto & Zonas (PPTO)",
-        "🔍 Detalle Clientes y Referencias"
+        "🔍 Detalle Clientes y Referencias",
     ])
 
     with tab1:
@@ -199,7 +199,7 @@ try:
                 "Selecciona el Año Base:",
                 anios_base_disp,
                 index=len(anios_base_disp) - 1 if anios_base_disp else 0,
-                key="anio_tab1"
+                key="anio_tab1",
             )
 
         with col_f2:
@@ -212,7 +212,7 @@ try:
             meses_sel = st.multiselect(
                 "Selecciona los meses activos:",
                 options=meses_ordenados_base,
-                key="meses_tab1_multi"
+                key="meses_tab1_multi",
             )
 
         st.markdown("---")
@@ -254,11 +254,21 @@ try:
 
             if not df_tendencia.empty:
                 fig_tend = px.line(
-                    df_tendencia, x=col_mes, y=col_valor, color="Año", markers=True,
-                    color_discrete_map={str(anio_sel): "#0066cc", str(anio_anterior): "#94a3b8"}
+                    df_tendencia,
+                    x=col_mes,
+                    y=col_valor,
+                    color="Año",
+                    markers=True,
+                    color_discrete_map={str(anio_sel): "#0066cc", str(anio_anterior): "#94a3b8"},
                 )
                 fig_tend.update_traces(hovertemplate="<b>Mes:</b> %{x}<br><b>Venta:</b> $%{y:,.0f}<extra></extra>")
-                fig_tend.update_layout(xaxis_title="Mes", yaxis_title="Venta Total ($)", legend_title="Año", height=350, margin=dict(l=0, r=0, t=20, b=0))
+                fig_tend.update_layout(
+                    xaxis_title="Mes",
+                    yaxis_title="Venta Total ($)",
+                    legend_title="Año",
+                    height=350,
+                    margin=dict(l=0, r=0, t=20, b=0),
+                )
                 st.plotly_chart(fig_tend, use_container_width=True)
 
             st.markdown("---")
@@ -279,9 +289,12 @@ try:
                 orden_vis = tabla_un_final.sort_values(by="Variación (%)", ascending=True)
                 fig_un_vis = px.bar(
                     orden_vis,
-                    x="Variación (%)", y=col_regional, orientation="h",
-                    color="Crecimiento_Tipo", color_discrete_map={"Crecimiento": "#2E7D32", "Decrecimiento": "#C62828"},
-                    text=orden_vis["Variación (%)"].apply(lambda x: f"{x:,.0f}%")
+                    x="Variación (%)",
+                    y=col_regional,
+                    orientation="h",
+                    color="Crecimiento_Tipo",
+                    color_discrete_map={"Crecimiento": "#2E7D32", "Decrecimiento": "#C62828"},
+                    text=orden_vis["Variación (%)"].apply(lambda x: f"{x:,.0f}%"),
                 )
                 fig_un_vis.update_traces(textposition="outside", hovertemplate="<b>%{y}</b><br>Variación: %{x:,.1f}%<extra></extra>")
                 fig_un_vis.update_layout(xaxis_title="Variación (%)", yaxis_title="", showlegend=False, height=300, margin=dict(l=0, r=0, t=10, b=0))
@@ -292,11 +305,11 @@ try:
                     f"Venta {anio_sel}": "${:,.0f}",
                     f"Venta {anio_anterior}": "${:,.0f}",
                     "Variación ($)": "${:,.0f}",
-                    "Variación (%)": "{:,.0f}%"
+                    "Variación (%)": "{:,.0f}%",
                 }
                 tabla_un_estilizada = (
-                    tabla_un_final.sort_values(by=f"Venta {anio_sel}", ascending=False).style
-                    .format(format_dict_un)
+                    tabla_un_final.sort_values(by=f"Venta {anio_sel}", ascending=False)
+                    .style.format(format_dict_un)
                     .map(color_variacion, subset=["Variación ($)", "Variación (%)"])
                     .hide(subset=["Crecimiento_Tipo"], axis="columns")
                 )
@@ -323,28 +336,4 @@ try:
                     df_cli_top["Texto_Moneda"] = df_cli_top[col_valor].apply(lambda x: f"${x:,.0f}")
                     fig_cli = px.bar(df_cli_top, x=col_valor, y=col_cliente, orientation="h", text="Texto_Moneda", color=col_valor, color_continuous_scale="Greens")
                     fig_cli.update_traces(texttemplate="%{text}", textposition="auto", hovertemplate="<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>")
-                    fig_cli.update_layout(yaxis={"categoryorder": "total ascending"}, showlegend=False, xaxis_title="Venta ($)", yaxis_title="Cliente")
-                    st.plotly_chart(fig_cli, use_container_width=True)
-                else:
-                    st.info("Sin datos.")
-
-            st.markdown("---")
-            st.subheader("📋 Detalle Avanzado por Cliente (Ventas, Ticket Promedio y Portafolio)")
-            col_busq, col_desc = st.columns([3, 1])
-            with col_busq:
-                busqueda_tabla = st.text_input("🔍 Buscar cliente:", "", key="busq_cli_tab1")
-
-            ventas_actual = df_actual.groupby(col_cliente, as_index=False)[col_valor].sum().rename(columns={col_valor: f"Venta {anio_sel}"})
-            ventas_anterior = df_ant.groupby(col_cliente, as_index=False)[col_valor].sum().rename(columns={col_valor: f"Venta {anio_anterior}"})
-
-            pedidos_act = df_actual.groupby(col_cliente).size().reset_index(name="Pedidos_Act")
-            pedidos_ant = df_ant.groupby(col_cliente).size().reset_index(name="Pedidos_Ant")
-            skus_act = df_actual[df_actual[col_valor] > 0].groupby(col_cliente)[col_referencia].nunique().reset_index(name="Portafolio (SKUs)")
-
-            tabla_final = pd.merge(ventas_actual, ventas_anterior, on=col_cliente, how="outer").fillna(0)
-            tabla_final = pd.merge(tabla_final, pedidos_act, on=col_cliente, how="left").fillna({"Pedidos_Act": 1})
-            tabla_final = pd.merge(tabla_final, pedidos_ant, on=col_cliente, how="left").fillna({"Pedidos_Ant": 1})
-            tabla_final = pd.merge(tabla_final, skus_act, on=col_cliente, how="left").fillna({"Portafolio (SKUs)": 0})
-
-            tabla_final[f"Ticket Prom. {anio_sel}"] = tabla_final[f"Venta {anio_sel}"] / tabla_final["Pedidos_Act"].replace(0, 1)
-            tabla_final[f"Ticket Prom. {anio_anterior}"] = tabla_final[f"Venta {anio_anterior}"] / tabla_final["Pedidos_Ant"].replace(
+                    fig_cli.update_layout(yaxis={"categoryorder": "total ascending"}, showlegend=False

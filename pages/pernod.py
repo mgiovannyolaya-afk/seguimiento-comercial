@@ -554,42 +554,76 @@ try:
             df_ma["Marca Limpia"] = df_ma["Marca Estrategica"].astype(str).map(_limpiar_marca_visible)
             df_mp["Marca Limpia"] = df_mp["Marca Estrategica"].astype(str).map(_limpiar_marca_visible)
 
-            # Primera tabla comparativa por Marca Estratégica
-            ma = df_ma.groupby("Marca Limpia", as_index=False)[col_valor].sum().rename(columns={col_valor: f"Venta {am}"})
-            mp = df_mp.groupby("Marca Limpia", as_index=False)[col_valor].sum().rename(columns={col_valor: f"Venta {am_ant}"})
+            venta_total_periodo = df_ma[col_valor].sum()
+            total_clientes_periodo = df_ma[df_ma[col_valor] > 0][col_cliente].nunique()
+
+            # Tabla comparativa principal por Marca Estratégica
+            ma = (
+                df_ma.groupby("Marca Limpia", as_index=False)
+                .agg(
+                    **{
+                        f"Venta {am}": (col_valor, "sum"),
+                        "Clientes": (col_cliente, lambda s: df_ma.loc[s.index][df_ma.loc[s.index, col_valor] > 0][col_cliente].nunique()),
+                    }
+                )
+            )
+            mp = (
+                df_mp.groupby("Marca Limpia", as_index=False)
+                .agg(**{f"Venta {am_ant}": (col_valor, "sum")})
+            )
 
             tm = pd.merge(ma, mp, on="Marca Limpia", how="outer").fillna(0)
             tm = tm[tm["Marca Limpia"].astype(str).str.strip() != ""]
             tm.rename(columns={"Marca Limpia": "Marca Estrategica"}, inplace=True)
+            tm["Clientes"] = tm["Clientes"].astype(int)
 
             tot_m = tm[f"Venta {am}"].sum()
+            tm["Peso Total (%)"] = (tm[f"Venta {am}"] / venta_total_periodo * 100) if venta_total_periodo > 0 else 0
             tm["Participación (%)"] = (tm[f"Venta {am}"] / tot_m * 100) if tot_m > 0 else 0
+            tm["Cobertura (%)"] = (tm["Clientes"] / total_clientes_periodo * 100) if total_clientes_periodo > 0 else 0
+            tm["Ticket Prom."] = tm.apply(
+                lambda r: (r[f"Venta {am}"] / r["Clientes"]) if r["Clientes"] > 0 else 0,
+                axis=1,
+            )
             tm["Variación ($)"] = tm[f"Venta {am}"] - tm[f"Venta {am_ant}"]
             tm["Variación (%)"] = ((tm[f"Venta {am}"] / tm[f"Venta {am_ant}"].replace(0, 1)) - 1) * 100
             tm = tm.sort_values(by=f"Venta {am}", ascending=False)
 
-            tm_plot = tm.sort_values(by=f"Venta {am}", ascending=True)
-            fig_m = px.bar(
-                tm_plot,
-                x=f"Venta {am}",
-                y="Marca Estrategica",
-                orientation="h",
-                color=f"Venta {am}",
-                color_continuous_scale="Purples",
-            )
-            fig_m.update_layout(height=max(340, len(tm_plot) * 26), showlegend=False)
-            st.plotly_chart(fig_m, use_container_width=True)
+            busq_marca = st.text_input("🔎 Buscador rápido de marca:", "", key="b_marca_tab4")
+            tm_vista = tm.copy()
+            if busq_marca.strip():
+                tm_vista = tm_vista[
+                    tm_vista["Marca Estrategica"].astype(str).str.contains(busq_marca.strip(), case=False, na=False)
+                ]
 
-            st.dataframe(
-                tm.style.format({
-                    f"Venta {am}": "${:,.0f}",
-                    f"Venta {am_ant}": "${:,.0f}",
-                    "Participación (%)": "{:,.1f}%",
-                    "Variación ($)": "${:+,.0f}",
-                    "Variación (%)": "{:+.1f}%",
-                }).map(color_variacion, subset=["Variación ($)", "Variación (%)"]),
-                use_container_width=True,
-            )
+            if not tm_vista.empty:
+                tm_plot = tm_vista.sort_values(by=f"Venta {am}", ascending=True)
+                fig_m = px.bar(
+                    tm_plot,
+                    x=f"Venta {am}",
+                    y="Marca Estrategica",
+                    orientation="h",
+                    color=f"Venta {am}",
+                    color_continuous_scale="Purples",
+                )
+                fig_m.update_layout(height=max(340, len(tm_plot) * 26), showlegend=False)
+                st.plotly_chart(fig_m, use_container_width=True)
+
+                st.dataframe(
+                    tm_vista.style.format({
+                        f"Venta {am}": "${:,.0f}",
+                        f"Venta {am_ant}": "${:,.0f}",
+                        "Peso Total (%)": "{:,.1f}%",
+                        "Participación (%)": "{:,.1f}%",
+                        "Cobertura (%)": "{:,.1f}%",
+                        "Ticket Prom.": "${:,.0f}",
+                        "Variación ($)": "${:+,.0f}",
+                        "Variación (%)": "{:+.1f}%",
+                    }).map(color_variacion, subset=["Variación ($)", "Variación (%)"]),
+                    use_container_width=True,
+                )
+            else:
+                st.info("No se encontraron marcas con ese filtro de búsqueda.")
 
             st.markdown("---")
             st.subheader("🔎 Referencias asignadas a 'Otros' (Comparativa)")
@@ -608,7 +642,7 @@ try:
                         **{
                             f"Venta {am}": (col_valor, "sum"),
                             "Registros": (col_valor, "count"),
-                            "Clientes": (col_cliente, "nunique"),
+                            "Clientes": (col_cliente, lambda s: df_otros_a.loc[s.index][df_otros_a.loc[s.index, col_valor] > 0][col_cliente].nunique()),
                         }
                     )
                 )
@@ -618,30 +652,48 @@ try:
                 )
 
                 res_o = pd.merge(oa, op, on=g_cols, how="outer").fillna(0)
-                res_o["Variación ($)"] = res_o[f"Venta {am}"] - res_o[f"Venta {am_ant}"]
-                res_o["Variación (%)"] = ((res_o[f"Venta {am}"] / res_o[f"Venta {am_ant}"].replace(0, 1)) - 1) * 100
                 res_o["Registros"] = res_o["Registros"].astype(int)
                 res_o["Clientes"] = res_o["Clientes"].astype(int)
+                res_o["Peso Total (%)"] = (res_o[f"Venta {am}"] / venta_total_periodo * 100) if venta_total_periodo > 0 else 0
+                res_o["Cobertura (%)"] = (res_o["Clientes"] / total_clientes_periodo * 100) if total_clientes_periodo > 0 else 0
+                res_o["Ticket Prom."] = res_o.apply(
+                    lambda r: (r[f"Venta {am}"] / r["Clientes"]) if r["Clientes"] > 0 else 0,
+                    axis=1,
+                )
+                res_o["Variación ($)"] = res_o[f"Venta {am}"] - res_o[f"Venta {am_ant}"]
+                res_o["Variación (%)"] = ((res_o[f"Venta {am}"] / res_o[f"Venta {am_ant}"].replace(0, 1)) - 1) * 100
                 res_o = res_o.sort_values(f"Venta {am}", ascending=False)
+
+                busq_otros = st.text_input("🔎 Buscador rápido en 'Otros' (referencia o producto):", "", key="b_otros_tab4")
+                res_o_vista = res_o.copy()
+                if busq_otros.strip():
+                    q = busq_otros.strip()
+                    mascara = pd.Series(False, index=res_o_vista.index)
+                    for c_b in g_cols:
+                        mascara = mascara | res_o_vista[c_b].astype(str).str.contains(q, case=False, na=False)
+                    res_o_vista = res_o_vista[mascara]
 
                 cols_ord_o = g_cols + [
                     f"Venta {am}",
                     f"Venta {am_ant}",
+                    "Peso Total (%)",
+                    "Cobertura (%)",
+                    "Ticket Prom.",
                     "Variación ($)",
                     "Variación (%)",
                     "Registros",
                     "Clientes",
                 ]
-                res_o = res_o[cols_ord_o]
+                res_o_vista = res_o_vista[cols_ord_o]
 
                 st.info(
-                    f"Se muestran **{len(res_o)}** referencias en **Otros** "
-                    f"(Venta {am}: **${res_o[f'Venta {am}'].sum():,.0f}** vs {am_ant}: **${res_o[f'Venta {am_ant}'].sum():,.0f}**)."
+                    f"Se muestran **{len(res_o_vista)}** referencias en **Otros** "
+                    f"(Venta {am}: **${res_o_vista[f'Venta {am}'].sum():,.0f}** vs {am_ant}: **${res_o_vista[f'Venta {am_ant}'].sum():,.0f}**)."
                 )
 
                 out = io.BytesIO()
                 with pd.ExcelWriter(out, engine="openpyxl") as writer:
-                    res_o.to_excel(writer, index=False, sheet_name="Otros_Comparativo")
+                    res_o_vista.to_excel(writer, index=False, sheet_name="Otros_Comparativo")
                 st.download_button(
                     "📥 Descargar 'Otros' Comparativo (Excel)",
                     data=out.getvalue(),
@@ -651,9 +703,12 @@ try:
                 )
 
                 st.dataframe(
-                    res_o.style.format({
+                    res_o_vista.style.format({
                         f"Venta {am}": "${:,.0f}",
                         f"Venta {am_ant}": "${:,.0f}",
+                        "Peso Total (%)": "{:,.1f}%",
+                        "Cobertura (%)": "{:,.1f}%",
+                        "Ticket Prom.": "${:,.0f}",
                         "Variación ($)": "${:+,.0f}",
                         "Variación (%)": "{:+.1f}%",
                         "Registros": "{:,.0f}",

@@ -1,3 +1,4 @@
+from difflib import SequenceMatcher
 import hashlib
 import io
 import os
@@ -158,7 +159,6 @@ try:
         .map(lambda x: mapa_meses.get(x, x.capitalize()))
     )
 
-    # Construcción de diccionarios y reglas inteligentes por nombre/abreviatura desde MARCAS
     mapa_cod_marca = {}
     mapa_desc_marca = {}
     marcas_conocidas = []
@@ -169,9 +169,10 @@ try:
         "chivas": ["chivas", "12yo", "13yo", "18yo", "sherry", "extra"],
         "glenlivet": ["glenliv", "glenlivet", "founders", "caribean", "caribbean"],
         "something": ["something", "some", "special"],
-        "passport": ["passport", "pass", "pas"],
-        "olmeca": ["olmeca", "olme"],
-        "absolut": ["absolut", "abs"],
+        "passport": ["passport", "passpor", "pass", "pas", "selection"],
+        "olmeca": ["olmeca", "olme", "reposado", "blanco"],
+        "absolut": ["absolut", "absolu", "abs"],
+        "dubonnet": ["dubonnet", "dubonne", "aperitivo"],
         "beefeater": ["beefeater", "beef"],
         "jameson": ["jameson", "jame"],
         "perrier": ["perrier", "jouet"],
@@ -179,6 +180,20 @@ try:
         "ricard": ["ricard", "pernod"],
         "ojo de tigre": ["ojo de tigre", "tigre"],
     }
+
+    marcas_base_respaldo = [
+        ("Passport", ["passport", "passpor", "pass", "pas"]),
+        ("Olmeca", ["olmeca", "olme"]),
+        ("Dubonnet", ["dubonnet", "dubonne"]),
+        ("Absolut", ["absolut", "absolu", "abs"]),
+        ("Ballantine's", ["ballantine", "ballant", "ballan"]),
+        ("Chivas Regal", ["chivas"]),
+        ("The Glenlivet", ["glenlivet", "glenliv"]),
+        ("Something Special", ["something", "some"]),
+        ("Beefeater", ["beefeater", "beef"]),
+        ("Jameson", ["jameson", "jame"]),
+        ("Ojo de Tigre", ["ojo de tigre", "tigre"]),
+    ]
 
     if not df_marcas.empty:
         cols_m = df_marcas.columns.tolist()
@@ -196,10 +211,10 @@ try:
             mc_norm = _normalizar_texto_busqueda(mc)
             pistas = set()
             for tok in mc_norm.split():
-                if len(tok) >= 4 and tok not in {"years", "year", "old", "the"}:
+                if len(tok) >= 3 and tok not in {"years", "year", "old", "the", "and", "de", "la", "el"}:
                     pistas.add(tok)
-                    if len(tok) >= 6:
-                        pistas.add(tok[:6])
+                    if len(tok) >= 5:
+                        pistas.add(tok[:5])
             for clave_al, lista_al in alias_comunes.items():
                 if clave_al in mc_norm:
                     for al in lista_al:
@@ -219,6 +234,26 @@ try:
                 if k_desc and k_desc not in mapa_desc_marca:
                     mapa_desc_marca[k_desc] = marca_val
 
+    for nombre_b, pistas_b in marcas_base_respaldo:
+        existe_ya = any(nombre_b.lower() in mc.lower() for mc in marcas_conocidas)
+        if not existe_ya:
+            marcas_conocidas.append(nombre_b)
+            pistas_por_marca[nombre_b] = sorted(
+                [_normalizar_texto_busqueda(p) for p in pistas_b if p],
+                key=len,
+                reverse=True,
+            )
+        else:
+            for mc in marcas_conocidas:
+                if nombre_b.lower() in mc.lower():
+                    actuales = set(pistas_por_marca.get(mc, []))
+                    for p in pistas_b:
+                        actuales.add(_normalizar_texto_busqueda(p))
+                    pistas_por_marca[mc] = sorted([p for p in actuales if p], key=len, reverse=True)
+
+    marcas_conocidas = sorted(set(marcas_conocidas), key=len, reverse=True)
+    marca_respaldo_final = marcas_conocidas[0] if marcas_conocidas else "Pernod Ricard"
+
     def _buscar_marca_por_texto(texto_norm):
         if not texto_norm:
             return None
@@ -228,8 +263,28 @@ try:
                 return mc
         for mc in marcas_conocidas:
             for pista in pistas_por_marca.get(mc, []):
-                if re.search(rf"\b{re.escape(pista)}", texto_norm):
+                if pista and pista in texto_norm:
                     return mc
+        mejor_mc = None
+        mejor_ratio = 0.0
+        for mc in marcas_conocidas:
+            mc_norm = _normalizar_texto_busqueda(mc)
+            if not mc_norm:
+                continue
+            for pal in texto_norm.split():
+                if len(pal) >= 4:
+                    ratio = SequenceMatcher(None, pal, mc_norm).ratio()
+                    if ratio > mejor_ratio:
+                        mejor_ratio = ratio
+                        mejor_mc = mc
+                    for tok_m in mc_norm.split():
+                        if len(tok_m) >= 4:
+                            r2 = SequenceMatcher(None, pal, tok_m).ratio()
+                            if r2 > mejor_ratio:
+                                mejor_ratio = r2
+                                mejor_mc = mc
+        if mejor_mc and mejor_ratio >= 0.72:
+            return mejor_mc
         return None
 
     def resolver_marca_y_estado(fila):
@@ -239,7 +294,6 @@ try:
         clave_ref = _limpiar_clave(val_ref)
         clave_nom = _limpiar_clave(val_nom_prod)
 
-        # 1. Cruce directo por código/referencia o nombre de producto contra MARCAS
         if clave_ref in mapa_cod_marca:
             return mapa_cod_marca[clave_ref], "En base MARCAS"
         if clave_nom and clave_nom in mapa_desc_marca:
@@ -247,7 +301,6 @@ try:
         if clave_ref in mapa_desc_marca:
             return mapa_desc_marca[clave_ref], "En base MARCAS (por desc.)"
 
-        # 2. Priorizar Nombre de producto para identificar marca y detectar si empieza por KV
         texto_prioritario = _normalizar_texto_busqueda(f"{val_nom_prod} {val_ref}")
         es_kv = bool(re.match(r"^kv(?:\b|[\s\-_:/0-9])", clave_nom)) or bool(
             re.match(r"^kv(?:\b|[\s\-_:/0-9])", clave_ref)
@@ -256,13 +309,13 @@ try:
         marca_detectada = _buscar_marca_por_texto(texto_prioritario)
         if marca_detectada:
             if es_kv:
-                return f"{marca_detectada} (KV)", "KV asignado por nombre de producto"
+                return marca_detectada, "KV asignado a marca"
             return marca_detectada, "Asignada por nombre de producto"
 
         if es_kv:
-            return "KV sin identificar", "KV sin registrar en MARCAS"
+            return marca_respaldo_final, "KV asignado a marca (respaldo)"
 
-        return "Sin identificar", "No encontrada en MARCAS"
+        return marca_respaldo_final, "Asignada a marca (respaldo)"
 
     res_marcas = df.apply(resolver_marca_y_estado, axis=1)
     df["Marca Estrategica"] = [r[0] for r in res_marcas]
@@ -934,8 +987,8 @@ try:
             )
 
             st.markdown("---")
-            st.subheader("🔎 Referencias y KV que aún quedan sin identificar")
-            df_pend = df_m_act[df_m_act["Marca Estrategica"].isin(["Sin identificar", "KV sin identificar"])].copy()
+            st.subheader("🔎 Referencias asignadas por aproximación o respaldo")
+            df_pend = df_m_act[df_m_act["Estado Cruce Marca"].str.contains("respaldo", case=False, na=False)].copy()
 
             if not df_pend.empty:
                 cols_group_pend = [col_referencia]
@@ -952,15 +1005,15 @@ try:
                     )
                     .sort_values(by="Venta_Total", ascending=False)
                 )
-                st.warning(f"Quedan **{len(resumen_pend)}** referencias sin identificar o `KV` pendientes (total **${resumen_pend['Venta_Total'].sum():,.0f}**).")
+                st.info(f"Todas las referencias están asignadas a una marca. Se muestran **{len(resumen_pend)}** referencias asignadas por respaldo (total **${resumen_pend['Venta_Total'].sum():,.0f}**).")
 
                 out_kv = io.BytesIO()
                 with pd.ExcelWriter(out_kv, engine="openpyxl") as writer_kv:
-                    resumen_pend.to_excel(writer_kv, index=False, sheet_name="Pendientes_Marcas")
+                    resumen_pend.to_excel(writer_kv, index=False, sheet_name="Asignadas_Respaldo")
                 st.download_button(
-                    label="📥 Descargar pendientes de marca (Excel)",
+                    label="📥 Descargar referencias por respaldo (Excel)",
                     data=out_kv.getvalue(),
-                    file_name=f"pendientes_marcas_kv_{anio_m}.xlsx",
+                    file_name=f"referencias_respaldo_{anio_m}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     key="dl_kv_excel",
                 )
@@ -974,7 +1027,7 @@ try:
                     use_container_width=True,
                 )
             else:
-                st.success("¡Listo! Todas las referencias y KV de la selección actual quedaron clasificadas.")
+                st.success("¡Listo! Todas las referencias y KV quedaron clasificadas directamente en su marca.")
 
     with tab5:
         st.subheader("🔍 Detalle de Clientes y Referencias")

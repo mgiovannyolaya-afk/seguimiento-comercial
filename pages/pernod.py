@@ -557,7 +557,7 @@ try:
             venta_total_periodo = df_ma[col_valor].sum()
             total_clientes_periodo = df_ma[df_ma[col_valor] > 0][col_cliente].nunique()
 
-            # Tabla comparativa principal por Marca Estratégica
+            # Tabla comparativa principal por Marca Estratégica (sin columna duplicada de Peso Total)
             ma = (
                 df_ma.groupby("Marca Limpia", as_index=False)
                 .agg(
@@ -578,7 +578,6 @@ try:
             tm["Clientes"] = tm["Clientes"].astype(int)
 
             tot_m = tm[f"Venta {am}"].sum()
-            tm["Peso Total (%)"] = (tm[f"Venta {am}"] / venta_total_periodo * 100) if venta_total_periodo > 0 else 0
             tm["Participación (%)"] = (tm[f"Venta {am}"] / tot_m * 100) if tot_m > 0 else 0
             tm["Cobertura (%)"] = (tm["Clientes"] / total_clientes_periodo * 100) if total_clientes_periodo > 0 else 0
             tm["Ticket Prom."] = tm.apply(
@@ -613,7 +612,6 @@ try:
                     tm_vista.style.format({
                         f"Venta {am}": "${:,.0f}",
                         f"Venta {am_ant}": "${:,.0f}",
-                        "Peso Total (%)": "{:,.1f}%",
                         "Participación (%)": "{:,.1f}%",
                         "Cobertura (%)": "{:,.1f}%",
                         "Ticket Prom.": "${:,.0f}",
@@ -654,7 +652,7 @@ try:
                 res_o = pd.merge(oa, op, on=g_cols, how="outer").fillna(0)
                 res_o["Registros"] = res_o["Registros"].astype(int)
                 res_o["Clientes"] = res_o["Clientes"].astype(int)
-                res_o["Peso Total (%)"] = (res_o[f"Venta {am}"] / venta_total_periodo * 100) if venta_total_periodo > 0 else 0
+                res_o["Participación (%)"] = (res_o[f"Venta {am}"] / venta_total_periodo * 100) if venta_total_periodo > 0 else 0
                 res_o["Cobertura (%)"] = (res_o["Clientes"] / total_clientes_periodo * 100) if total_clientes_periodo > 0 else 0
                 res_o["Ticket Prom."] = res_o.apply(
                     lambda r: (r[f"Venta {am}"] / r["Clientes"]) if r["Clientes"] > 0 else 0,
@@ -676,7 +674,7 @@ try:
                 cols_ord_o = g_cols + [
                     f"Venta {am}",
                     f"Venta {am_ant}",
-                    "Peso Total (%)",
+                    "Participación (%)",
                     "Cobertura (%)",
                     "Ticket Prom.",
                     "Variación ($)",
@@ -706,7 +704,7 @@ try:
                     res_o_vista.style.format({
                         f"Venta {am}": "${:,.0f}",
                         f"Venta {am_ant}": "${:,.0f}",
-                        "Peso Total (%)": "{:,.1f}%",
+                        "Participación (%)": "{:,.1f}%",
                         "Cobertura (%)": "{:,.1f}%",
                         "Ticket Prom.": "${:,.0f}",
                         "Variación ($)": "${:+,.0f}",
